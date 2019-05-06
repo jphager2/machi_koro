@@ -61,8 +61,8 @@ type Player struct {
 }
 
 type Effect struct {
-	Description func(card *SupplyCard) string
-	Call        func(currentPlayer bool, roller *Player, other []*Player, b *Bank)
+	Description func(card SupplyCard) string
+	Call        func(card SupplyCard, roller *Player, all []*Player, b *Bank)
 }
 
 func NewBankPayout(payout int, onlyCurrent bool) Effect {
@@ -75,12 +75,24 @@ func NewBankPayout(payout int, onlyCurrent bool) Effect {
 	}
 
 	return Effect{
-		Description: func(c *SupplyCard) string {
+		Description: func(c SupplyCard) string {
 			return fmt.Sprintf("Get %s from the bank on anyone's turn", coins)
 		},
-		Call: func(currentPlayer bool, roller *Player, other []*Player, b *Bank) {
-			if !onlyCurrent || currentPlayer {
-				remainder := b.WithdrawTo(payout, roller)
+		Call: func(card SupplyCard, roller *Player, all []*Player, b *Bank) {
+			var receivers []*Player
+
+			if onlyCurrent {
+				receivers = []*Player{roller}
+			} else {
+				receivers = all
+			}
+
+			for _, player := range receivers {
+				cardCount := player.SupplyCards[card.Name]
+				if cardCount == 0 {
+					continue
+				}
+				remainder := b.WithdrawTo(payout*cardCount, roller)
 
 				if remainder > 0 {
 					fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
@@ -88,6 +100,25 @@ func NewBankPayout(payout int, onlyCurrent bool) Effect {
 			}
 		},
 	}
+}
+
+type SupplyCardCollection struct {
+	Cards []SupplyCard
+}
+
+func (s *SupplyCardCollection) FindByRole(role int) []SupplyCard {
+	var found []SupplyCard
+
+	for _, card := range s.Cards {
+		for _, number := range card.ActiveNumbers {
+			if number == role {
+				found = append(found, card)
+				break
+			}
+		}
+	}
+
+	return found
 }
 
 type SupplyCard struct {
@@ -106,24 +137,26 @@ var (
 		},
 	}
 
-	supplyCards = []SupplyCard{
-		SupplyCard{
-			Name:          "Wheat Field",
-			Cost:          1,
-			ActiveNumbers: []int{1},
-			Effect:        NewBankPayout(1, false),
-		},
-		SupplyCard{
-			Name:          "Ranch",
-			Cost:          1,
-			ActiveNumbers: []int{2},
-			Effect:        NewBankPayout(1, false),
-		},
-		SupplyCard{
-			Name:          "Bakery",
-			Cost:          1,
-			ActiveNumbers: []int{2, 3},
-			Effect:        NewBankPayout(1, true),
+	supplyCards = SupplyCardCollection{
+		Cards: []SupplyCard{
+			SupplyCard{
+				Name:          "Wheat Field",
+				Cost:          1,
+				ActiveNumbers: []int{1},
+				Effect:        NewBankPayout(1, false),
+			},
+			SupplyCard{
+				Name:          "Ranch",
+				Cost:          1,
+				ActiveNumbers: []int{2},
+				Effect:        NewBankPayout(1, false),
+			},
+			SupplyCard{
+				Name:          "Bakery",
+				Cost:          1,
+				ActiveNumbers: []int{2, 3},
+				Effect:        NewBankPayout(1, true),
+			},
 		},
 	}
 )
@@ -133,9 +166,11 @@ func main() {
 
 	playerCount := 2
 
-	players := make([]Player, playerCount)
+	var players []*Player
 
-	for i, player := range players {
+	for i := 0; i < playerCount; i++ {
+		player := Player{}
+		players = append(players, &player)
 		remainder := bank.WithdrawTo(3, &player)
 
 		if remainder > 0 {
@@ -150,12 +185,18 @@ func main() {
 		fmt.Println(player.SupplyCards)
 	}
 
-	for i := 0; i < 3; i += 1 {
-		// Roll 1
-		for j, player := range players {
-			currentPlayer := j == 0
+	// Roll 1
+	for _, roller := range players {
+		cards := supplyCards.FindByRole(1)
 
-			var cards []SupplyCard
+		for _, card := range cards {
+			card.Effect.Call(card, roller, players, &bank)
 		}
+	}
+
+	for i, player := range players {
+		fmt.Printf("Bank: %d Coins\n", bank.Coins.Total())
+		fmt.Printf("%d: %d Coins\n", i, player.Coins.Total())
+		fmt.Println(player.SupplyCards)
 	}
 }
