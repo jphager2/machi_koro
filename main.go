@@ -44,29 +44,27 @@ func (c *CoinSet) Add(ones int, fives int, tens int) {
 	c.TenCoins += tens
 }
 
-type Bank struct {
-	Coins CoinSet
-}
-
-func (b *Bank) WithdrawTo(amount int, p *Player) int {
-	ones, fives, tens, remainder := b.Coins.Sub(amount)
+func (c *CoinSet) WithdrawTo(amount int, p *Player) int {
+	ones, fives, tens, remainder := c.Sub(amount)
 	p.Coins.Add(ones, fives, tens)
 
 	return remainder
 }
 
 type Player struct {
+	Id          int
 	SupplyCards map[string]int
 	Coins       CoinSet
 }
 
 type Effect struct {
-	Description func(card SupplyCard) string
-	Call        func(card SupplyCard, roller *Player, all []*Player, b *Bank)
+	Description func() string
+	Call        func(card SupplyCard, roller *Player, all []*Player)
 }
 
 func NewBankPayout(payout int, onlyCurrent bool) Effect {
 	var coins string
+	var receiverName string
 
 	if payout == 1 {
 		coins = "1 coin"
@@ -74,11 +72,18 @@ func NewBankPayout(payout int, onlyCurrent bool) Effect {
 		coins = fmt.Sprintf("%d coins", payout)
 	}
 
+	if onlyCurrent {
+		receiverName = "your turn only"
+	} else {
+		receiverName = "anyone's turn"
+	}
+
 	return Effect{
-		Description: func(c SupplyCard) string {
-			return fmt.Sprintf("Get %s from the bank on anyone's turn", coins)
+		Description: func() string {
+			return fmt.Sprintf("Get %s from the bank on %s", coins, receiverName)
 		},
-		Call: func(card SupplyCard, roller *Player, all []*Player, b *Bank) {
+
+		Call: func(card SupplyCard, roller *Player, all []*Player) {
 			var receivers []*Player
 
 			if onlyCurrent {
@@ -89,13 +94,53 @@ func NewBankPayout(payout int, onlyCurrent bool) Effect {
 
 			for _, player := range receivers {
 				cardCount := player.SupplyCards[card.Name]
+				totalPayout := payout * cardCount
 				if cardCount == 0 {
 					continue
 				}
-				remainder := b.WithdrawTo(payout*cardCount, roller)
+				fmt.Print(card.Effect.Description())
+				fmt.Printf(" [%s]\n", card.Name)
+				remainder := bank.WithdrawTo(totalPayout, player)
 
 				if remainder > 0 {
 					fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
+				}
+			}
+		},
+	}
+}
+
+func NewRollerPayout(payout int) Effect {
+	var coins string
+
+	if payout == 1 {
+		coins = "1 coin"
+	} else {
+		coins = fmt.Sprintf("%d coins", payout)
+	}
+
+	return Effect{
+		Description: func() string {
+			return fmt.Sprintf("Get %s from the player who rolled the dice", coins)
+		},
+
+		Call: func(card SupplyCard, roller *Player, all []*Player) {
+			for _, player := range all {
+				if player == roller {
+					continue
+				}
+				cardCount := player.SupplyCards[card.Name]
+				totalPayout := payout * cardCount
+				if cardCount == 0 {
+					continue
+				}
+				fmt.Print(card.Effect.Description())
+				fmt.Printf(" [%s]\n", card.Name)
+
+				remainder := roller.Coins.WithdrawTo(totalPayout, player)
+
+				if remainder > 0 {
+					fmt.Printf("Roller did not have enough money. Missing: %d\n", remainder)
 				}
 			}
 		},
@@ -129,12 +174,10 @@ type SupplyCard struct {
 }
 
 var (
-	bank = Bank{
-		Coins: CoinSet{
-			OneCoins:  42,
-			FiveCoins: 24,
-			TenCoins:  12,
-		},
+	bank = CoinSet{
+		OneCoins:  42,
+		FiveCoins: 24,
+		TenCoins:  12,
 	}
 
 	supplyCards = SupplyCardCollection{
@@ -157,19 +200,33 @@ var (
 				ActiveNumbers: []int{2, 3},
 				Effect:        NewBankPayout(1, true),
 			},
+			SupplyCard{
+				Name:          "Cafe",
+				Cost:          2,
+				ActiveNumbers: []int{3},
+				Effect:        NewRollerPayout(1),
+			},
 		},
 	}
+
+	players []*Player
 )
+
+func Roll(roller *Player, r int) {
+	cards := supplyCards.FindByRole(r)
+
+	for _, card := range cards {
+		card.Effect.Call(card, roller, players)
+	}
+}
 
 func main() {
 	fmt.Println("machi koro!")
 
 	playerCount := 2
 
-	var players []*Player
-
 	for i := 0; i < playerCount; i++ {
-		player := Player{}
+		player := Player{Id: i}
 		players = append(players, &player)
 		remainder := bank.WithdrawTo(3, &player)
 
@@ -179,24 +236,40 @@ func main() {
 		player.SupplyCards = make(map[string]int)
 		player.SupplyCards["Wheat Field"] += 1
 		player.SupplyCards["Bakery"] += 1
+		player.SupplyCards["Cafe"] += 1
 
-		fmt.Printf("Bank: %d Coins\n", bank.Coins.Total())
+		fmt.Printf("Bank: %d Coins\n", bank.Total())
 		fmt.Printf("%d: %d Coins\n", i, player.Coins.Total())
 		fmt.Println(player.SupplyCards)
 	}
 
-	// Roll 1
-	for _, roller := range players {
-		cards := supplyCards.FindByRole(1)
-
-		for _, card := range cards {
-			card.Effect.Call(card, roller, players, &bank)
-		}
+	// Roll 1 three times
+	for i := 0; i < 3; i++ {
+		roller := players[0]
+		Roll(roller, 1)
 	}
 
 	for i, player := range players {
-		fmt.Printf("Bank: %d Coins\n", bank.Coins.Total())
 		fmt.Printf("%d: %d Coins\n", i, player.Coins.Total())
-		fmt.Println(player.SupplyCards)
+	}
+
+	// Roll 2 three times
+	for i := 0; i < 3; i++ {
+		roller := players[0]
+		Roll(roller, 2)
+	}
+
+	for i, player := range players {
+		fmt.Printf("%d: %d Coins\n", i, player.Coins.Total())
+	}
+
+	// Roll 3 three times
+	for i := 0; i < 3; i++ {
+		roller := players[0]
+		Roll(roller, 3)
+	}
+
+	for i, player := range players {
+		fmt.Printf("%d: %d Coins\n", i, player.Coins.Total())
 	}
 }
