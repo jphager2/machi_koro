@@ -1,271 +1,150 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"strconv"
-	"strings"
+	"math/rand"
+	"os"
+	"time"
 )
 
-type CoinSet struct {
-	OneCoins  int
-	FiveCoins int
-	TenCoins  int
-}
-
-func (c *CoinSet) Total() int {
-	return c.OneCoins + c.FiveCoins*5 + c.TenCoins*10
-}
-
-func (c *CoinSet) Sub(amount int) (int, int, int, int) {
-	var ones int
-	var fives int
-	var tens int
-
-	for amount >= 10 && c.TenCoins > 0 {
-		tens += 1
-		c.TenCoins -= 1
-		amount -= 10
-	}
-	for amount >= 5 && c.FiveCoins > 0 {
-		fives += 1
-		c.FiveCoins -= 1
-		amount -= 5
-	}
-	for amount >= 1 && c.OneCoins > 0 {
-		ones += 1
-		c.OneCoins -= 1
-		amount -= 1
-	}
-
-	return ones, fives, tens, amount
-}
-
-func (c *CoinSet) Add(ones int, fives int, tens int) {
-	c.OneCoins += ones
-	c.FiveCoins += fives
-	c.TenCoins += tens
-}
-
-func (c *CoinSet) WithdrawTo(amount int, p *Player) int {
-	ones, fives, tens, remainder := c.Sub(amount)
-	p.Coins.Add(ones, fives, tens)
-
-	return remainder
-}
-
 type Player struct {
-	Id          int
-	SupplyCards map[string]int
-	Coins       CoinSet
+	Id            int
+	SupplyCards   map[string]int
+	LandmarkCards map[string]bool
+	Coins         CoinSet
 }
 
-type Effect struct {
-	Description func() string
-	Call        func(card SupplyCard, roller *Player, all []*Player)
-}
+func GetSupplyCardPurchase(roller *Player) bool {
+	var res int
 
-func NewBankPayout(payout int, onlyCurrent bool) Effect {
-	var coins string
-	var receiverName string
+	fmt.Printf("Do you want to buy an establishment? (%d coins) ", roller.Coins.Total())
+	res, _ = GetInt([]int{0, 1})
 
-	if payout == 1 {
-		coins = "1 coin"
-	} else {
-		coins = fmt.Sprintf("%d coins", payout)
+	if res != 1 {
+		return false
 	}
 
-	if onlyCurrent {
-		receiverName = "your turn only"
-	} else {
-		receiverName = "anyone's turn"
-	}
-
-	return Effect{
-		Description: func() string {
-			return fmt.Sprintf("Get %s from the bank on %s", coins, receiverName)
-		},
-
-		Call: func(card SupplyCard, roller *Player, all []*Player) {
-			var receivers []*Player
-
-			if onlyCurrent {
-				receivers = []*Player{roller}
-			} else {
-				receivers = all
-			}
-
-			for _, player := range receivers {
-				cardCount := player.SupplyCards[card.Name]
-				totalPayout := payout * cardCount
-				if cardCount == 0 {
-					continue
-				}
-				fmt.Print(card.Effect.Description())
-				fmt.Printf(" [%s]\n", card.Name)
-				remainder := bank.WithdrawTo(totalPayout, player)
-
-				if remainder > 0 {
-					fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
-				}
-			}
-		},
-	}
-}
-
-func NewAllBankPayout(r int) Effect {
-	return NewBankPayout(r, false)
-}
-
-func NewRollerBankPayout(r int) Effect {
-	return NewBankPayout(r, true)
-}
-
-func NewRollerPayout(payout int) Effect {
-	var coins string
-
-	if payout == 1 {
-		coins = "1 coin"
-	} else {
-		coins = fmt.Sprintf("%d coins", payout)
-	}
-
-	return Effect{
-		Description: func() string {
-			return fmt.Sprintf("Get %s from the player who rolled the dice", coins)
-		},
-
-		Call: func(card SupplyCard, roller *Player, all []*Player) {
-			for _, player := range all {
-				if player == roller {
-					continue
-				}
-				cardCount := player.SupplyCards[card.Name]
-				totalPayout := payout * cardCount
-				if cardCount == 0 {
-					continue
-				}
-				fmt.Print(card.Effect.Description())
-				fmt.Printf(" [%s]\n", card.Name)
-
-				remainder := roller.Coins.WithdrawTo(totalPayout, player)
-
-				if remainder > 0 {
-					fmt.Printf("Roller did not have enough money. Missing: %d\n", remainder)
-				}
-			}
-		},
-	}
-}
-
-func NewIconCardPayout(payout int, icon string) Effect {
-	return Effect{
-		Description: func() string {
-			return fmt.Sprintf("Get %d coins from the bank for each [%s] establishment that you own on your turn only", payout, icon)
-		},
-
-		Call: func(card SupplyCard, roller *Player, all []*Player) {
-			cardCount := roller.SupplyCards[card.Name]
-			iconCards := supplyCards.FindByIcon(icon)
-			iconCardCount := 0
-			for _, iconCard := range iconCards {
-				iconCardCount += roller.SupplyCards[iconCard.Name]
-			}
-			totalPayout := payout * iconCardCount * cardCount
-
-			if cardCount == 0 {
-				return
-			}
-
-			fmt.Print(card.Effect.Description())
-			fmt.Printf(" [%s]\n", card.Name)
-
-			remainder := bank.WithdrawTo(totalPayout, roller)
-
-			if remainder > 0 {
-				fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
-			}
-		},
-	}
-}
-
-type SupplyCardCollection struct {
-	Cards []SupplyCard
-}
-
-func (s *SupplyCardCollection) FindByIcon(icon string) []SupplyCard {
-	var found []SupplyCard
-
-	for _, card := range s.Cards {
-		if card.Icon == icon {
-			found = append(found, card)
+	i := 0
+	choices := []int{}
+	choiceNames := []string{}
+	fmt.Println("Establishments: ")
+	for _, card := range supplyCards.Cards {
+		if card.Supply == 0 {
+			continue
 		}
+
+		i++
+		choices = append(choices, i)
+		choiceNames = append(choiceNames, card.Name)
+		fmt.Printf("  (%d) %s [%d coins] (%d left): %s\n", i, card.Name, card.Cost, card.Supply, card.Effect.Description())
 	}
 
-	return found
+	fmt.Print("Which establishment do you want to buy? ")
+	supplyCardIdx, err := GetInt(choices)
+	if err != nil {
+		fmt.Println("No establishment selected.")
+		return false
+	}
+	supplyCardName := choiceNames[supplyCardIdx-1]
+	card := supplyCards.FindByName(supplyCardName)
+
+	if roller.Coins.Total() < card.Cost {
+		fmt.Printf("Player %d does not have enough coins to buy %s\n", roller.Id, supplyCardName)
+	} else {
+		fmt.Printf("Player %d buys %s\n", roller.Id, supplyCardName)
+		roller.Coins.WithdrawTo(card.Cost, &bank)
+		roller.SupplyCards[supplyCardName]++
+		card.Supply--
+	}
+	return true
 }
 
-func (s *SupplyCardCollection) FindByName(name string) SupplyCard {
-	for _, card := range s.Cards {
-		if name == card.Name {
-			return card
+func GetLandmarkCardPurchase(roller *Player) bool {
+	var res int
+
+	fmt.Printf("Do you want to buy a landmark? (%d coins) ", roller.Coins.Total())
+	res, _ = GetInt([]int{0, 1})
+
+	if res != 1 {
+		return false
+	}
+
+	i := 0
+	choices := []int{}
+	choiceNames := []string{}
+	fmt.Println("Landmarks: ")
+	for _, landmark := range landmarkCardsSorted {
+		if roller.LandmarkCards[landmark.Name] {
+			continue
 		}
+
+		i++
+		choices = append(choices, i)
+		choiceNames = append(choiceNames, landmark.Name)
+		fmt.Printf("  (%d) %s [%d coins]: %s\n", i, landmark.Name, landmark.Cost, landmark.Description)
 	}
 
-	return SupplyCard{}
+	fmt.Print("Which landmark do you want to buy? ")
+	landmarkIdx, err := GetInt(choices)
+	if err != nil {
+		fmt.Println("No landmark selected.")
+		return false
+	}
+	landmarkName := choiceNames[landmarkIdx-1]
+	landmark := landmarkCards[landmarkName]
+
+	if roller.Coins.Total() < landmark.Cost {
+		fmt.Printf("Player %d does not have enough coins to buy %s\n", roller.Id, landmarkName)
+	} else {
+		fmt.Printf("Player %d buys %s\n", roller.Id, landmarkName)
+		roller.Coins.WithdrawTo(landmark.Cost, &bank)
+		roller.LandmarkCards[landmarkName] = true
+	}
+
+	return true
 }
 
-func (s *SupplyCardCollection) FindByRole(role int) []SupplyCard {
-	var found []SupplyCard
+func GetRoll(roller *Player) (int, bool, error) {
+	var dieCount int
+	var err error
+	var doubles bool
 
-	for _, card := range s.Cards {
-		for _, number := range card.ActiveNumbers {
-			if number == role {
-				found = append(found, card)
-				break
-			}
+	if roller.LandmarkCards["Train Station"] {
+		fmt.Print("Roll 1 or 2 dice? ")
+		dieCount, err = GetInt([]int{1, 2})
+
+		if err != nil {
+			return 0, false, err
 		}
+	} else {
+		dieCount = 1
 	}
 
-	return found
-}
+	roll := 0
+	for i := 0; i < dieCount; i++ {
+		die := rand.Intn(5) + 1
+		if i == 2 && roll == die {
+			doubles = true
+		}
+		roll += die
+	}
 
-type SupplyCard struct {
-	Name          string
-	Cost          int
-	ActiveNumbers []int
-	Effect        Effect
-	Icon          string
+	return roll, doubles, nil
 }
 
 func Roll(roller *Player, r int) {
-	cards := supplyCards.FindByRole(r)
+	cards := supplyCards.FindByRoll(r)
 
 	for _, card := range cards {
-		card.Effect.Call(card, roller, players)
+		card.Effect.Call(*card, roller, players)
 	}
 }
 
-func JoinInts(ints []int, delimiter string) string {
-	str := make([]string, len(ints))
-	for i, v := range ints {
-		str[i] = strconv.Itoa(v)
+func PrintPlayerStatus() {
+	for _, player := range players {
+		fmt.Printf("%d: %d Coins\n", player.Id, player.Coins.Total())
+		fmt.Println(player.SupplyCards)
 	}
-
-	return strings.Join(str, delimiter)
-}
-
-func GetInt(validValues []int) (int, error) {
-	var val int
-	fmt.Scan(&val)
-
-	for _, v := range validValues {
-		if v == val {
-			return val, nil
-		}
-	}
-
-	return 0, errors.New(fmt.Sprintf("Invalid input '%d' for values (%s)", val, JoinInts(validValues, ",")))
 }
 
 var (
@@ -295,7 +174,8 @@ var (
 				if player == roller {
 					continue
 				}
-				remainder := player.Coins.WithdrawTo(totalPayout, roller)
+				fmt.Printf("Player %d gets %d coins from player %d [%s]\n", roller.Id, totalPayout, player.Id, card.Name)
+				remainder := player.Coins.WithdrawTo(totalPayout, &roller.Coins)
 
 				if remainder > 0 {
 					fmt.Printf("Player %d did not have enough money. Missing: %d\n", player.Id, remainder)
@@ -327,7 +207,7 @@ var (
 				}
 
 				choices = append(choices, player.Id)
-				fmt.Printf("Player %d: %d coins\n", player.Id, player.Coins.Total())
+				fmt.Printf("Player (%d) has %d coins\n", player.Id, player.Coins.Total())
 			}
 
 			choice, err := GetInt(choices)
@@ -342,7 +222,8 @@ var (
 					continue
 				}
 
-				remainder := player.Coins.WithdrawTo(totalPayout, roller)
+				fmt.Printf("Player %d gets %d coins from player %d [%s]\n", roller.Id, totalPayout, player.Id, card.Name)
+				remainder := player.Coins.WithdrawTo(totalPayout, &roller.Coins)
 
 				if remainder > 0 {
 					fmt.Printf("Player %d did not have enough money. Missing: %d\n", player.Id, remainder)
@@ -376,7 +257,7 @@ var (
 						fmt.Printf("You have cards:\n")
 					} else {
 						playerChoices = append(playerChoices, player.Id)
-						fmt.Printf("Player %d has cards:\n", player.Id)
+						fmt.Printf("Player (%d) has cards:\n", player.Id)
 					}
 
 					j := 1
@@ -388,7 +269,7 @@ var (
 						}
 						cardChoices[player.Id] = append(cardChoices[player.Id], j)
 						cardChoiceNames[player.Id] = append(cardChoiceNames[player.Id], cardName)
-						fmt.Printf("  %d) %s [%d]\n", j, cardName, cardCount)
+						fmt.Printf("  (%d) %s [%d]\n", j, cardName, cardCount)
 						j++
 					}
 				}
@@ -416,6 +297,7 @@ var (
 				}
 				giveCardName := cardChoiceNames[roller.Id][giveCardIdx-1]
 
+				fmt.Printf("Player %d trades %s for %s with player %d [%s]\n", roller.Id, giveCardName, takeCardName, playerId, card.Name)
 				roller.SupplyCards[giveCardName]--
 				roller.SupplyCards[takeCardName]++
 
@@ -431,130 +313,182 @@ var (
 		},
 	}
 
+	landmarkCardsSorted []LandmarkCard
+	landmarkCards       map[string]LandmarkCard
+
 	players []*Player
 )
 
 func init() {
+	rand.Seed(time.Now().UTC().UnixNano())
+
 	supplyCards = SupplyCardCollection{
-		Cards: []SupplyCard{
-			SupplyCard{
+		Cards: []*SupplyCard{
+			&SupplyCard{
 				Name:          "Wheat Field",
 				Cost:          1,
 				ActiveNumbers: []int{1},
 				Effect:        NewAllBankPayout(1),
 				Icon:          "Wheat",
+				Supply:        6,
 			},
-			SupplyCard{
+			&SupplyCard{
 				Name:          "Ranch",
 				Cost:          1,
 				ActiveNumbers: []int{2},
 				Effect:        NewAllBankPayout(1),
 				Icon:          "Cow",
+				Supply:        6,
 			},
-			SupplyCard{
+			&SupplyCard{
 				Name:          "Bakery",
 				Cost:          1,
 				ActiveNumbers: []int{2, 3},
 				Effect:        NewRollerBankPayout(1),
 				Icon:          "Bread",
 			},
-			SupplyCard{
+			&SupplyCard{
 				Name:          "Cafe",
 				Cost:          2,
 				ActiveNumbers: []int{3},
 				Effect:        NewRollerPayout(1),
 				Icon:          "Cup",
+				Supply:        6,
 			},
-			SupplyCard{
+			&SupplyCard{
 				Name:          "Convenience Store",
 				Cost:          2,
 				ActiveNumbers: []int{4},
 				Effect:        NewRollerBankPayout(3),
 				Icon:          "Bread",
+				Supply:        6,
 			},
-			SupplyCard{
+			&SupplyCard{
 				Name:          "Forest",
 				Cost:          3,
 				ActiveNumbers: []int{5},
 				Effect:        NewAllBankPayout(1),
 				Icon:          "Gear",
+				Supply:        6,
 			},
-			SupplyCard{
+			&SupplyCard{
 				Name:          "Stadium",
 				Cost:          6,
 				ActiveNumbers: []int{6},
 				Effect:        stadiumEffect,
 				Icon:          "Major",
+				Supply:        4,
 			},
-			SupplyCard{
+			&SupplyCard{
 				Name:          "TV Station",
 				Cost:          7,
 				ActiveNumbers: []int{6},
 				Effect:        tvStationEffect,
 				Icon:          "Major",
+				Supply:        4,
 			},
-			SupplyCard{
+			&SupplyCard{
 				Name:          "Business Center",
 				Cost:          8,
 				ActiveNumbers: []int{6},
 				Effect:        businessCenterEffect,
 				Icon:          "Major",
+				Supply:        4,
 			},
-			SupplyCard{
+			&SupplyCard{
 				Name:          "Cheese Factory",
 				Cost:          5,
 				ActiveNumbers: []int{7},
 				Effect:        NewIconCardPayout(3, "Cow"),
 				Icon:          "Factory",
+				Supply:        6,
 			},
-			SupplyCard{
+			&SupplyCard{
 				Name:          "Furniture Factory",
 				Cost:          3,
 				ActiveNumbers: []int{8},
 				Effect:        NewIconCardPayout(3, "Gear"),
 				Icon:          "Factory",
+				Supply:        6,
 			},
-			SupplyCard{
+			&SupplyCard{
 				Name:          "Mine",
 				Cost:          6,
 				ActiveNumbers: []int{9},
 				Effect:        NewAllBankPayout(5),
 				Icon:          "Gear",
+				Supply:        6,
 			},
-			SupplyCard{
+			&SupplyCard{
 				Name:          "Family Restaurant",
 				Cost:          3,
 				ActiveNumbers: []int{9, 10},
 				Effect:        NewRollerPayout(2),
 				Icon:          "Cup",
+				Supply:        6,
 			},
-			SupplyCard{
+			&SupplyCard{
 				Name:          "Apple Orchard",
 				Cost:          3,
 				ActiveNumbers: []int{10},
 				Effect:        NewAllBankPayout(3),
 				Icon:          "Wheat",
+				Supply:        6,
 			},
-			SupplyCard{
+			&SupplyCard{
 				Name:          "Fruit and Vegetable Market",
 				Cost:          2,
 				ActiveNumbers: []int{11, 12},
 				Effect:        NewIconCardPayout(2, "Wheat"),
 				Icon:          "Fruit",
+				Supply:        6,
 			},
 		},
+	}
+
+	landmarkCardsSorted = []LandmarkCard{
+		LandmarkCard{
+			Name:        "Train Station",
+			Cost:        4,
+			Description: "You may roll 1 or 2 dice",
+		},
+		LandmarkCard{
+			Name:        "Shopping Mall",
+			Cost:        10,
+			Description: "Each of your [Cup] and [Bread] establishments earn +1 coin",
+		},
+		LandmarkCard{
+			Name:        "Amusement Park",
+			Cost:        16,
+			Description: "If you roll doubles take another turn after this one",
+		},
+		LandmarkCard{
+			Name:        "Radio Tower",
+			Cost:        22,
+			Description: "Once every turn you can choose to re-roll your dice",
+		},
+	}
+	landmarkCards = make(map[string]LandmarkCard)
+	for _, card := range landmarkCardsSorted {
+		landmarkCards[card.Name] = card
 	}
 }
 
 func main() {
 	fmt.Println("machi koro!")
 
-	playerCount := 2
+	fmt.Print("How many players (2 - 4): ")
+	playerCount, err := GetInt([]int{2, 3, 4})
+
+	if err != nil {
+		fmt.Println("This game is for 2-4 players")
+		os.Exit(1)
+	}
 
 	for i := 0; i < playerCount; i++ {
 		player := Player{Id: i}
 		players = append(players, &player)
-		remainder := bank.WithdrawTo(3, &player)
+		remainder := bank.WithdrawTo(3, &player.Coins)
 
 		if remainder > 0 {
 			fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
@@ -562,40 +496,68 @@ func main() {
 		player.SupplyCards = make(map[string]int)
 		player.SupplyCards["Wheat Field"] += 1
 		player.SupplyCards["Bakery"] += 1
-		player.SupplyCards["Fruit and Vegetable Market"] += 1
 
-		fmt.Printf("Bank: %d Coins\n", bank.Total())
-		fmt.Printf("%d: %d Coins\n", i, player.Coins.Total())
-		fmt.Println(player.SupplyCards)
+		player.LandmarkCards = make(map[string]bool)
+		for landmarkName, _ := range landmarkCards {
+			player.LandmarkCards[landmarkName] = false
+		}
 	}
 
-	// Roll 1 three times
-	for i := 0; i < 3; i++ {
-		roller := players[0]
-		Roll(roller, 1)
-	}
+	turn := 0
 
-	for i, player := range players {
-		fmt.Printf("%d: %d Coins\n", i, player.Coins.Total())
-	}
+	// Game Loop
+	for {
+		didAction := false
+		roller := players[turn]
 
-	// Roll 2 three times
-	for i := 0; i < 3; i++ {
-		roller := players[0]
-		Roll(roller, 2)
-	}
+		fmt.Printf("It's player %d's turn\n", roller.Id)
 
-	for i, player := range players {
-		fmt.Printf("%d: %d Coins\n", i, player.Coins.Total())
-	}
+		roll, doubles, err := GetRoll(roller)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		fmt.Printf("Player %d rolls %d\n", roller.Id, roll)
 
-	// Roll 11 three times
-	for i := 0; i < 3; i++ {
-		roller := players[0]
-		Roll(roller, 11)
-	}
+		if roller.LandmarkCards["RadioTower"] {
+			fmt.Print("Do you want to re-roll? ")
+			reroll, _ := GetInt([]int{0, 1})
 
-	for i, player := range players {
-		fmt.Printf("%d: %d Coins\n", i, player.Coins.Total())
+			if reroll == 1 {
+				roll, _, err := GetRoll(roller)
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+				fmt.Printf("Player %d rolls %d\n", roller.Id, roll)
+			}
+		}
+
+		Roll(roller, roll)
+		didAction = GetSupplyCardPurchase(roller)
+
+		if didAction {
+			didAction = false
+		} else {
+			didAction = GetLandmarkCardPurchase(roller)
+		}
+
+		winner := true
+		for _, hasLandmark := range roller.LandmarkCards {
+			if !hasLandmark {
+				winner = false
+				break
+			}
+		}
+		if winner {
+			fmt.Printf("Player %d has won the game!\n", roller.Id)
+			os.Exit(0)
+		}
+
+		if doubles && roller.LandmarkCards["Amusement Park"] {
+			continue
+		}
+
+		turn = (turn + 1) % len(players)
 	}
 }
