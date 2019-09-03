@@ -8,7 +8,7 @@ import (
 )
 
 type Player struct {
-	Id            int
+	ID            int
 	SupplyCards   map[string]int
 	LandmarkCards map[string]bool
 	Coins         CoinSet
@@ -49,9 +49,9 @@ func GetSupplyCardPurchase(roller *Player) bool {
 	card := supplyCards.FindByName(supplyCardName)
 
 	if roller.Coins.Total() < card.Cost {
-		fmt.Printf("Player %d does not have enough coins to buy %s\n", roller.Id, supplyCardName)
+		fmt.Printf("Player %d does not have enough coins to buy %s\n", roller.ID, supplyCardName)
 	} else {
-		fmt.Printf("Player %d buys %s\n", roller.Id, supplyCardName)
+		fmt.Printf("Player %d buys %s\n", roller.ID, supplyCardName)
 		roller.Coins.WithdrawTo(card.Cost, &bank)
 		roller.SupplyCards[supplyCardName]++
 		card.Supply--
@@ -94,9 +94,9 @@ func GetLandmarkCardPurchase(roller *Player) bool {
 	landmark := landmarkCards[landmarkName]
 
 	if roller.Coins.Total() < landmark.Cost {
-		fmt.Printf("Player %d does not have enough coins to buy %s\n", roller.Id, landmarkName)
+		fmt.Printf("Player %d does not have enough coins to buy %s\n", roller.ID, landmarkName)
 	} else {
-		fmt.Printf("Player %d buys %s\n", roller.Id, landmarkName)
+		fmt.Printf("Player %d buys %s\n", roller.ID, landmarkName)
 		roller.Coins.WithdrawTo(landmark.Cost, &bank)
 		roller.LandmarkCards[landmarkName] = true
 	}
@@ -142,7 +142,7 @@ func Roll(roller *Player, r int) {
 
 func PrintPlayerStatus() {
 	for _, player := range players {
-		fmt.Printf("%d: %d Coins\n", player.Id, player.Coins.Total())
+		fmt.Printf("%d: %d Coins\n", player.ID, player.Coins.Total())
 		fmt.Println(player.SupplyCards)
 	}
 }
@@ -174,11 +174,11 @@ var (
 				if player == roller {
 					continue
 				}
-				fmt.Printf("Player %d gets %d coins from player %d [%s]\n", roller.Id, totalPayout, player.Id, card.Name)
+				fmt.Printf("Player %d gets %d coins from player %d [%s]\n", roller.ID, totalPayout, player.ID, card.Name)
 				remainder := player.Coins.WithdrawTo(totalPayout, &roller.Coins)
 
 				if remainder > 0 {
-					fmt.Printf("Player %d did not have enough money. Missing: %d\n", player.Id, remainder)
+					fmt.Printf("Player %d did not have enough money. Missing: %d\n", player.ID, remainder)
 				}
 			}
 		},
@@ -206,8 +206,8 @@ var (
 					continue
 				}
 
-				choices = append(choices, player.Id)
-				fmt.Printf("Player (%d) has %d coins\n", player.Id, player.Coins.Total())
+				choices = append(choices, player.ID)
+				fmt.Printf("Player (%d) has %d coins\n", player.ID, player.Coins.Total())
 			}
 
 			choice, err := GetInt(choices)
@@ -218,15 +218,15 @@ var (
 			}
 
 			for _, player := range players {
-				if player.Id != choice {
+				if player.ID != choice {
 					continue
 				}
 
-				fmt.Printf("Player %d gets %d coins from player %d [%s]\n", roller.Id, totalPayout, player.Id, card.Name)
+				fmt.Printf("Player %d gets %d coins from player %d [%s]\n", roller.ID, totalPayout, player.ID, card.Name)
 				remainder := player.Coins.WithdrawTo(totalPayout, &roller.Coins)
 
 				if remainder > 0 {
-					fmt.Printf("Player %d did not have enough money. Missing: %d\n", player.Id, remainder)
+					fmt.Printf("Player %d did not have enough money. Missing: %d\n", player.ID, remainder)
 				}
 
 				return
@@ -256,8 +256,8 @@ var (
 					if player == roller {
 						fmt.Printf("You have cards:\n")
 					} else {
-						playerChoices = append(playerChoices, player.Id)
-						fmt.Printf("Player (%d) has cards:\n", player.Id)
+						playerChoices = append(playerChoices, player.ID)
+						fmt.Printf("Player (%d) has cards:\n", player.ID)
 					}
 
 					j := 1
@@ -267,42 +267,42 @@ var (
 						if currentCard.Icon == "Major" || cardCount == 0 {
 							continue
 						}
-						cardChoices[player.Id] = append(cardChoices[player.Id], j)
-						cardChoiceNames[player.Id] = append(cardChoiceNames[player.Id], cardName)
+						cardChoices[player.ID] = append(cardChoices[player.ID], j)
+						cardChoiceNames[player.ID] = append(cardChoiceNames[player.ID], cardName)
 						fmt.Printf("  (%d) %s [%d]\n", j, cardName, cardCount)
 						j++
 					}
 				}
 
 				fmt.Println("Pick a player to trade cards with: ")
-				playerId, err := GetInt(playerChoices)
+				playerID, err := GetInt(playerChoices)
 				if err != nil {
 					fmt.Println(err)
 					continue
 				}
 
 				fmt.Println("Pick a card to take: ")
-				takeCardIdx, err := GetInt(cardChoices[playerId])
+				takeCardIdx, err := GetInt(cardChoices[playerID])
 				if err != nil {
 					fmt.Println(err)
 					continue
 				}
-				takeCardName := cardChoiceNames[playerId][takeCardIdx-1]
+				takeCardName := cardChoiceNames[playerID][takeCardIdx-1]
 
 				fmt.Println("Pick a card to give: ")
-				giveCardIdx, err := GetInt(cardChoices[roller.Id])
+				giveCardIdx, err := GetInt(cardChoices[roller.ID])
 				if err != nil {
 					fmt.Println(err)
 					continue
 				}
-				giveCardName := cardChoiceNames[roller.Id][giveCardIdx-1]
+				giveCardName := cardChoiceNames[roller.ID][giveCardIdx-1]
 
-				fmt.Printf("Player %d trades %s for %s with player %d [%s]\n", roller.Id, giveCardName, takeCardName, playerId, card.Name)
+				fmt.Printf("Player %d trades %s for %s with player %d [%s]\n", roller.ID, giveCardName, takeCardName, playerID, card.Name)
 				roller.SupplyCards[giveCardName]--
 				roller.SupplyCards[takeCardName]++
 
 				for _, player := range players {
-					if player.Id != playerId {
+					if player.ID != playerID {
 						continue
 					}
 
@@ -346,6 +346,7 @@ func init() {
 				ActiveNumbers: []int{2, 3},
 				Effect:        NewRollerBankPayout(1),
 				Icon:          "Bread",
+				Supply:        6,
 			},
 			&SupplyCard{
 				Name:          "Cafe",
@@ -486,7 +487,7 @@ func main() {
 	}
 
 	for i := 0; i < playerCount; i++ {
-		player := Player{Id: i}
+		player := Player{ID: i}
 		players = append(players, &player)
 		remainder := bank.WithdrawTo(3, &player.Coins)
 
@@ -510,14 +511,14 @@ func main() {
 		didAction := false
 		roller := players[turn]
 
-		fmt.Printf("It's player %d's turn\n", roller.Id)
+		fmt.Printf("It's player %d's turn\n", roller.ID)
 
 		roll, doubles, err := GetRoll(roller)
 		if err != nil {
 			fmt.Println(err)
 			continue
 		}
-		fmt.Printf("Player %d rolls %d\n", roller.Id, roll)
+		fmt.Printf("Player %d rolls %d\n", roller.ID, roll)
 
 		if roller.LandmarkCards["RadioTower"] {
 			fmt.Print("Do you want to re-roll? ")
@@ -529,7 +530,7 @@ func main() {
 					fmt.Println(err)
 					continue
 				}
-				fmt.Printf("Player %d rolls %d\n", roller.Id, roll)
+				fmt.Printf("Player %d rolls %d\n", roller.ID, roll)
 			}
 		}
 
@@ -550,7 +551,7 @@ func main() {
 			}
 		}
 		if winner {
-			fmt.Printf("Player %d has won the game!\n", roller.Id)
+			fmt.Printf("Player %d has won the game!\n", roller.ID)
 			os.Exit(0)
 		}
 

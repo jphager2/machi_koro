@@ -10,7 +10,7 @@ type Effect struct {
 }
 
 func landmarkCardAgumentedPayout(payout int, card SupplyCard, p *Player) int {
-	if p.LandmarkCards["Shopping Mall"] && card.Icon == "Cup" || card.Icon == "Bread" {
+	if p.LandmarkCards["Shopping Mall"] && (card.Icon == "Cup" || card.Icon == "Bread") {
 		return payout + 1
 	} else {
 		return payout
@@ -44,7 +44,7 @@ func NewBankPayout(payout int, onlyCurrent bool) Effect {
 			if onlyCurrent {
 				receivers = []*Player{roller}
 			} else {
-				receivers = all
+				receivers = counterClockwise(all, roller)
 			}
 
 			// fmt.Print(card.Effect.Description())
@@ -56,7 +56,7 @@ func NewBankPayout(payout int, onlyCurrent bool) Effect {
 				if cardCount == 0 {
 					continue
 				}
-				fmt.Printf("Player %d gets %d coins from the bank [%s].\n", player.Id, totalPayout, card.Name)
+				fmt.Printf("Player %d gets %d coins from the bank [%s].\n", player.ID, totalPayout, card.Name)
 				remainder := bank.WithdrawTo(totalPayout, &player.Coins)
 
 				if remainder > 0 {
@@ -93,7 +93,8 @@ func NewRollerPayout(payout int) Effect {
 			// fmt.Print(card.Effect.Description())
 			// fmt.Printf(" [%s]\n", card.Name)
 
-			for _, player := range all {
+			receivers := counterClockwise(all, roller)
+			for _, player := range receivers {
 				if player == roller {
 					continue
 				}
@@ -102,7 +103,7 @@ func NewRollerPayout(payout int) Effect {
 				if cardCount == 0 {
 					continue
 				}
-				fmt.Printf("Player %d gets %d coins from the player %d [%s].\n", player.Id, totalPayout, roller.Id, card.Name)
+				fmt.Printf("Player %d gets %d coins from the player %d [%s].\n", player.ID, totalPayout, roller.ID, card.Name)
 				remainder := roller.Coins.WithdrawTo(totalPayout, &player.Coins)
 
 				if remainder > 0 {
@@ -135,7 +136,7 @@ func NewIconCardPayout(payout int, icon string) Effect {
 				return
 			}
 
-			fmt.Printf("Player %d gets %d coins from the bank [%s].\n", roller.Id, totalPayout, card.Name)
+			fmt.Printf("Player %d gets %d coins from the bank [%s].\n", roller.ID, totalPayout, card.Name)
 			remainder := bank.WithdrawTo(totalPayout, &roller.Coins)
 
 			if remainder > 0 {
@@ -143,4 +144,15 @@ func NewIconCardPayout(payout int, icon string) Effect {
 			}
 		},
 	}
+}
+
+func counterClockwise(all []*Player, roller *Player) []*Player {
+	reversed := []*Player{roller}
+	index := roller.ID
+
+	for i := 0; i > len(all); i++ {
+		reversed = append(reversed, all[(len(all)+index-i)%len(all)])
+	}
+
+	return reversed
 }
