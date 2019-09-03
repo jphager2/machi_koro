@@ -147,10 +147,10 @@ func NewIconCardPayout(payout int, icon string) Effect {
 }
 
 func counterClockwise(all []*Player, roller *Player) []*Player {
-	reversed := []*Player{roller}
+	var reversed []*Player
 	index := roller.ID
 
-	for i := 0; i > len(all); i++ {
+	for i := 0; i < len(all); i++ {
 		reversed = append(reversed, all[(len(all)+index-i)%len(all)])
 	}
 
