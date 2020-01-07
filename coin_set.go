@@ -1,46 +1,46 @@
 package main
 
-type CoinSet struct {
+type coinSet struct {
 	OneCoins  int
 	FiveCoins int
 	TenCoins  int
 }
 
-func (c *CoinSet) Total() int {
+func (c *coinSet) Total() int {
 	return c.OneCoins + c.FiveCoins*5 + c.TenCoins*10
 }
 
-func (c *CoinSet) Sub(amount int) (int, int, int, int) {
+func (c *coinSet) Sub(amount int) (int, int, int, int) {
 	var ones int
 	var fives int
 	var tens int
 
 	for amount >= 10 && c.TenCoins > 0 {
-		tens += 1
-		c.TenCoins -= 1
+		tens++
+		c.TenCoins--
 		amount -= 10
 	}
 	for amount >= 5 && c.FiveCoins > 0 {
-		fives += 1
-		c.FiveCoins -= 1
+		fives++
+		c.FiveCoins--
 		amount -= 5
 	}
 	for amount >= 1 && c.OneCoins > 0 {
-		ones += 1
-		c.OneCoins -= 1
-		amount -= 1
+		ones++
+		c.OneCoins--
+		amount--
 	}
 
 	return ones, fives, tens, amount
 }
 
-func (c *CoinSet) Add(ones int, fives int, tens int) {
+func (c *coinSet) Add(ones int, fives int, tens int) {
 	c.OneCoins += ones
 	c.FiveCoins += fives
 	c.TenCoins += tens
 }
 
-func (c *CoinSet) WithdrawTo(amount int, receiver *CoinSet) int {
+func (c *coinSet) TransferTo(amount int, receiver *coinSet) int {
 	ones, fives, tens, remainder := c.Sub(amount)
 	receiver.Add(ones, fives, tens)
 

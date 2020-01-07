@@ -1,11 +1,11 @@
 package main
 
-type SupplyCardCollection struct {
-	Cards []*SupplyCard
+type supplyCardCollection struct {
+	Cards []*supplyCard
 }
 
-func (s *SupplyCardCollection) FindByIcon(icon string) []*SupplyCard {
-	var found []*SupplyCard
+func (s *supplyCardCollection) FindByIcon(icon string) []*supplyCard {
+	var found []*supplyCard
 
 	for i := range s.Cards {
 		card := s.Cards[i]
@@ -18,7 +18,7 @@ func (s *SupplyCardCollection) FindByIcon(icon string) []*SupplyCard {
 	return found
 }
 
-func (s *SupplyCardCollection) FindByName(name string) *SupplyCard {
+func (s *supplyCardCollection) FindByName(name string) *supplyCard {
 	for i := range s.Cards {
 		card := s.Cards[i]
 
@@ -27,11 +27,11 @@ func (s *SupplyCardCollection) FindByName(name string) *SupplyCard {
 		}
 	}
 
-	return &SupplyCard{}
+	return &supplyCard{}
 }
 
-func (s *SupplyCardCollection) FindByRoll(roll int) []*SupplyCard {
-	var found []*SupplyCard
+func (s *supplyCardCollection) FindByRoll(roll int) []*supplyCard {
+	var found []*supplyCard
 
 	for i := range s.Cards {
 		card := s.Cards[i]
@@ -47,11 +47,11 @@ func (s *SupplyCardCollection) FindByRoll(roll int) []*SupplyCard {
 	return found
 }
 
-type SupplyCard struct {
+type supplyCard struct {
 	Name          string
 	Cost          int
 	ActiveNumbers []int
-	Effect        Effect
+	Effect        effect
 	Icon          string
 	Supply        int
 }

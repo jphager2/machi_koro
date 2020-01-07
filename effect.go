@@ -4,20 +4,19 @@ import (
 	"fmt"
 )
 
-type Effect struct {
+type effect struct {
 	Description func() string
-	Call        func(card SupplyCard, roller *Player, all []*Player)
+	Call        func(card supplyCard, rlr *player, all []*player)
 }
 
-func landmarkCardAgumentedPayout(payout int, card SupplyCard, p *Player) int {
+func landmarkCardAgumentedPayout(payout int, card supplyCard, p *player) int {
 	if p.LandmarkCards["Shopping Mall"] && (card.Icon == "Cup" || card.Icon == "Bread") {
 		return payout + 1
-	} else {
-		return payout
 	}
+	return payout
 }
 
-func NewBankPayout(payout int, onlyCurrent bool) Effect {
+func newBankPayout(payout int, onlyCurrent bool) effect {
 	var coins string
 	var receiverName string
 
@@ -33,31 +32,28 @@ func NewBankPayout(payout int, onlyCurrent bool) Effect {
 		receiverName = "anyone's turn"
 	}
 
-	return Effect{
+	return effect{
 		Description: func() string {
 			return fmt.Sprintf("Get %s from the bank on %s", coins, receiverName)
 		},
 
-		Call: func(card SupplyCard, roller *Player, all []*Player) {
-			var receivers []*Player
+		Call: func(card supplyCard, rlr *player, all []*player) {
+			var receivers []*player
 
 			if onlyCurrent {
-				receivers = []*Player{roller}
+				receivers = []*player{rlr}
 			} else {
-				receivers = counterClockwise(all, roller)
+				receivers = counterClockwise(all, rlr)
 			}
 
-			// fmt.Print(card.Effect.Description())
-			// fmt.Printf(" [%s]\n", card.Name)
-
-			for _, player := range receivers {
-				cardCount := player.SupplyCards[card.Name]
-				totalPayout := landmarkCardAgumentedPayout(payout, card, player) * cardCount
+			for _, p := range receivers {
+				cardCount := p.SupplyCards[card.Name]
+				totalPayout := landmarkCardAgumentedPayout(payout, card, p) * cardCount
 				if cardCount == 0 {
 					continue
 				}
-				fmt.Printf("Player %d gets %d coins from the bank [%s].\n", player.ID, totalPayout, card.Name)
-				remainder := bank.WithdrawTo(totalPayout, &player.Coins)
+				fmt.Printf("Player %d gets %d coins from the bank [%s].\n", p.ID, totalPayout, card.Name)
+				remainder := bank.TransferTo(totalPayout, &p.Coins)
 
 				if remainder > 0 {
 					fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
@@ -67,15 +63,15 @@ func NewBankPayout(payout int, onlyCurrent bool) Effect {
 	}
 }
 
-func NewAllBankPayout(r int) Effect {
-	return NewBankPayout(r, false)
+func newAllBankPayout(r int) effect {
+	return newBankPayout(r, false)
 }
 
-func NewRollerBankPayout(r int) Effect {
-	return NewBankPayout(r, true)
+func newRollerBankPayout(r int) effect {
+	return newBankPayout(r, true)
 }
 
-func NewRollerPayout(payout int) Effect {
+func newRollerPayout(payout int) effect {
 	var coins string
 
 	if payout == 1 {
@@ -84,27 +80,24 @@ func NewRollerPayout(payout int) Effect {
 		coins = fmt.Sprintf("%d coins", payout)
 	}
 
-	return Effect{
+	return effect{
 		Description: func() string {
 			return fmt.Sprintf("Get %s from the player who rolled the dice", coins)
 		},
 
-		Call: func(card SupplyCard, roller *Player, all []*Player) {
-			// fmt.Print(card.Effect.Description())
-			// fmt.Printf(" [%s]\n", card.Name)
-
-			receivers := counterClockwise(all, roller)
-			for _, player := range receivers {
-				if player == roller {
+		Call: func(card supplyCard, rlr *player, all []*player) {
+			receivers := counterClockwise(all, rlr)
+			for _, p := range receivers {
+				if p == rlr {
 					continue
 				}
-				cardCount := player.SupplyCards[card.Name]
-				totalPayout := landmarkCardAgumentedPayout(payout, card, player) * cardCount
+				cardCount := p.SupplyCards[card.Name]
+				totalPayout := landmarkCardAgumentedPayout(payout, card, p) * cardCount
 				if cardCount == 0 {
 					continue
 				}
-				fmt.Printf("Player %d gets %d coins from the player %d [%s].\n", player.ID, totalPayout, roller.ID, card.Name)
-				remainder := roller.Coins.WithdrawTo(totalPayout, &player.Coins)
+				fmt.Printf("Player %d gets %d coins from the player %d [%s].\n", p.ID, totalPayout, rlr.ID, card.Name)
+				remainder := rlr.Coins.TransferTo(totalPayout, &p.Coins)
 
 				if remainder > 0 {
 					fmt.Printf("Roller did not have enough money. Missing: %d\n", remainder)
@@ -114,21 +107,18 @@ func NewRollerPayout(payout int) Effect {
 	}
 }
 
-func NewIconCardPayout(payout int, icon string) Effect {
-	return Effect{
+func newIconCardPayout(payout int, icon string) effect {
+	return effect{
 		Description: func() string {
 			return fmt.Sprintf("Get %d coins from the bank for each [%s] establishment that you own on your turn only", payout, icon)
 		},
 
-		Call: func(card SupplyCard, roller *Player, all []*Player) {
-			// fmt.Print(card.Effect.Description())
-			// fmt.Printf(" [%s]\n", card.Name)
-
-			cardCount := roller.SupplyCards[card.Name]
+		Call: func(card supplyCard, rlr *player, all []*player) {
+			cardCount := rlr.SupplyCards[card.Name]
 			iconCards := supplyCards.FindByIcon(icon)
 			iconCardCount := 0
 			for _, iconCard := range iconCards {
-				iconCardCount += roller.SupplyCards[iconCard.Name]
+				iconCardCount += rlr.SupplyCards[iconCard.Name]
 			}
 			totalPayout := payout * iconCardCount * cardCount
 
@@ -136,8 +126,8 @@ func NewIconCardPayout(payout int, icon string) Effect {
 				return
 			}
 
-			fmt.Printf("Player %d gets %d coins from the bank [%s].\n", roller.ID, totalPayout, card.Name)
-			remainder := bank.WithdrawTo(totalPayout, &roller.Coins)
+			fmt.Printf("Player %d gets %d coins from the bank [%s].\n", rlr.ID, totalPayout, card.Name)
+			remainder := bank.TransferTo(totalPayout, &rlr.Coins)
 
 			if remainder > 0 {
 				fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
@@ -146,9 +136,9 @@ func NewIconCardPayout(payout int, icon string) Effect {
 	}
 }
 
-func counterClockwise(all []*Player, roller *Player) []*Player {
-	var reversed []*Player
-	index := roller.ID
+func counterClockwise(all []*player, rlr *player) []*player {
+	var reversed []*player
+	index := rlr.ID
 
 	for i := 0; i < len(all); i++ {
 		reversed = append(reversed, all[(len(all)+index-i)%len(all)])

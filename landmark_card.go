@@ -1,6 +1,6 @@
 package main
 
-type LandmarkCard struct {
+type landmarkCard struct {
 	Name        string
 	Cost        int
 	Description string
