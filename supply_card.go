@@ -1,7 +1,25 @@
 package main
 
 type supplyCardCollection struct {
-	Cards []*supplyCard
+	Cards            []*supplyCard
+	PrioritizedCards []*supplyCard
+}
+
+func newSupplyCardCollection(cards []*supplyCard) supplyCardCollection {
+	var prioritized []*supplyCard
+
+	for i := 0; i < 3; i++ {
+		for _, card := range cards {
+			if card.Effect.Priority == i {
+				prioritized = append(prioritized, card)
+			}
+		}
+	}
+
+	return supplyCardCollection{
+		Cards:            cards,
+		PrioritizedCards: prioritized,
+	}
 }
 
 func (s *supplyCardCollection) FindByIcon(icon string) []*supplyCard {
@@ -33,7 +51,7 @@ func (s *supplyCardCollection) FindByName(name string) *supplyCard {
 func (s *supplyCardCollection) FindByRoll(roll int) []*supplyCard {
 	var found []*supplyCard
 
-	for i := range s.Cards {
+	for i := range s.PrioritizedCards {
 		card := s.Cards[i]
 
 		for _, number := range card.ActiveNumbers {

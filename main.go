@@ -26,137 +26,136 @@ var (
 	}
 
 	stadiumEffect = effect{
+		Priority: 1,
+
 		Description: func() string {
 			return "Get 2 coins from all players on your turn only"
 		},
 
-		Call: func(card supplyCard, rlr *player, all []*player) {
-			cardCount := rlr.SupplyCards[card.Name]
-			totalPayout := 2 * cardCount
-			if cardCount == 0 {
-				return
-			}
+		Call: func(card supplyCard, rlr *player, p *player, c int) {
+			totalPayout := 2 * c
+
 			fmt.Print(card.Effect.Description())
 			fmt.Printf(" [%s]\n", card.Name)
 
-			for _, p := range all {
-				if p == rlr {
+			for _, plr := range plrs {
+				if plr == rlr {
 					continue
 				}
-				fmt.Printf("Player %d gets %d coins from player %d [%s]\n", rlr.ID, totalPayout, p.ID, card.Name)
-				remainder := p.Coins.TransferTo(totalPayout, &rlr.Coins)
+
+				fmt.Printf("Player %d gets %d coins from player %d [%s]\n", rlr.ID, totalPayout, plr.ID, card.Name)
+				remainder := plr.Coins.TransferTo(totalPayout, &rlr.Coins)
 
 				if remainder > 0 {
-					fmt.Printf("Player %d did not have enough money. Missing: %d\n", p.ID, remainder)
+					fmt.Printf("Player %d did not have enough money. Missing: %d\n", plr.ID, remainder)
 				}
 			}
 		},
 	}
 
 	tvStationEffect = effect{
+		Priority: 1,
+
 		Description: func() string {
 			return "Take 5 coins from any one player on your turn only"
 		},
 
-		Call: func(card supplyCard, rlr *player, all []*player) {
+		Call: func(card supplyCard, rlr *player, p *player, c int) {
 			var choices []int
+			var choice int
+			var err error
 
-			cardCount := rlr.SupplyCards[card.Name]
-			totalPayout := 5 * cardCount
-			if cardCount == 0 {
-				return
-			}
+			totalPayout := 5 * c
+
 			fmt.Print(card.Effect.Description())
 			fmt.Printf(" [%s]\n", card.Name)
 			fmt.Println("Pick a player to take coins from: ")
 
-			for _, p := range all {
-				if p == rlr {
+			for _, plr := range plrs {
+				if plr == rlr {
 					continue
 				}
 
-				choices = append(choices, p.ID)
-				fmt.Printf("Player (%d) has %d coins\n", p.ID, p.Coins.Total())
+				choices = append(choices, plr.ID)
+				fmt.Printf("Player (%d) has %d coins\n", plr.ID, plr.Coins.Total())
 			}
 
-			choice, err := scanInt(choices)
+			for {
+				choice, err = scanInt(choices)
 
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			for _, p := range plrs {
-				if p.ID != choice {
+				if err != nil {
+					fmt.Println(err)
 					continue
 				}
 
-				fmt.Printf("Player %d gets %d coins from player %d [%s]\n", rlr.ID, totalPayout, p.ID, card.Name)
-				remainder := p.Coins.TransferTo(totalPayout, &rlr.Coins)
-
-				if remainder > 0 {
-					fmt.Printf("Player %d did not have enough money. Missing: %d\n", p.ID, remainder)
-				}
-
-				return
+				break
 			}
+
+			plr := plrs[choice]
+
+			fmt.Printf("Player %d gets %d coins from player %d [%s]\n", rlr.ID, totalPayout, plr.ID, card.Name)
+			remainder := plr.Coins.TransferTo(totalPayout, &rlr.Coins)
+
+			if remainder > 0 {
+				fmt.Printf("Player %d did not have enough money. Missing: %d\n", plr.ID, remainder)
+			}
+
+			return
 		},
 	}
 
 	businessCenterEffect = effect{
+		Priority: 2,
+
 		Description: func() string {
 			return "Trade one non major establishment with any one player on your turn only"
 		},
 
-		Call: func(card supplyCard, rlr *player, all []*player) {
-			cardCount := rlr.SupplyCards[card.Name]
-			if cardCount == 0 {
-				return
-			}
+		Call: func(card supplyCard, rlr *player, p *player, c int) {
 			fmt.Print(card.Effect.Description())
 			fmt.Printf(" [%s]\n", card.Name)
 
-			for i := 0; i < cardCount; i++ {
-				playerChoices := []int{}
+			for i := 0; i < c; i++ {
+				plrChoices := []int{}
 				cardChoices := make(map[int][]int)
 				cardChoiceNames := make(map[int][]string)
 
-				for _, p := range all {
-					if p == rlr {
-						fmt.Printf("You have cards:\n")
+				for _, plr := range plrs {
+					if plr == rlr {
+						fmt.Printf("Roller has cards:\n")
 					} else {
-						playerChoices = append(playerChoices, p.ID)
-						fmt.Printf("Player (%d) has cards:\n", p.ID)
+						plrChoices = append(plrChoices, plr.ID)
+						fmt.Printf("Player (%d) has cards:\n", plr.ID)
 					}
 
 					j := 1
-					for cardName, cardCount := range p.SupplyCards {
+					for cardName, cardCount := range plr.SupplyCards {
 						currentCard := supplyCards.FindByName(cardName)
 
 						if currentCard.Icon == "Major" || cardCount == 0 {
 							continue
 						}
-						cardChoices[p.ID] = append(cardChoices[p.ID], j)
-						cardChoiceNames[p.ID] = append(cardChoiceNames[p.ID], cardName)
+						cardChoices[plr.ID] = append(cardChoices[plr.ID], j)
+						cardChoiceNames[plr.ID] = append(cardChoiceNames[plr.ID], cardName)
 						fmt.Printf("  (%d) %s [%d]\n", j, cardName, cardCount)
 						j++
 					}
 				}
 
 				fmt.Println("Pick a player to trade cards with: ")
-				playerID, err := scanInt(playerChoices)
+				plrID, err := scanInt(plrChoices)
 				if err != nil {
 					fmt.Println(err)
 					continue
 				}
 
 				fmt.Println("Pick a card to take: ")
-				takeCardIdx, err := scanInt(cardChoices[playerID])
+				takeCardIdx, err := scanInt(cardChoices[plrID])
 				if err != nil {
 					fmt.Println(err)
 					continue
 				}
-				takeCardName := cardChoiceNames[playerID][takeCardIdx-1]
+				takeCardName := cardChoiceNames[plrID][takeCardIdx-1]
 
 				fmt.Println("Pick a card to give: ")
 				giveCardIdx, err := scanInt(cardChoices[rlr.ID])
@@ -166,12 +165,12 @@ var (
 				}
 				giveCardName := cardChoiceNames[rlr.ID][giveCardIdx-1]
 
-				fmt.Printf("Player %d trades %s for %s with player %d [%s]\n", rlr.ID, giveCardName, takeCardName, playerID, card.Name)
+				fmt.Printf("Player %d trades %s for %s with player %d [%s]\n", rlr.ID, giveCardName, takeCardName, plrID, card.Name)
 				rlr.SupplyCards[giveCardName]--
 				rlr.SupplyCards[takeCardName]++
 
-				for _, p := range plrs {
-					if p.ID != playerID {
+				for _, plr := range plrs {
+					if plr.ID != plrID {
 						continue
 					}
 
@@ -191,8 +190,8 @@ var (
 func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	supplyCards = supplyCardCollection{
-		Cards: []*supplyCard{
+	supplyCards = newSupplyCardCollection(
+		[]*supplyCard{
 			&supplyCard{
 				Name:          "Wheat Field",
 				Cost:          1,
@@ -314,7 +313,7 @@ func init() {
 				Supply:        6,
 			},
 		},
-	}
+	)
 
 	landmarkCardsSorted = []landmarkCard{
 		landmarkCard{
@@ -348,14 +347,14 @@ func main() {
 	fmt.Println("machi koro!")
 
 	fmt.Print("How many players (2 - 4): ")
-	playerCount, err := scanInt([]int{2, 3, 4})
+	plrCount, err := scanInt([]int{2, 3, 4})
 
 	if err != nil {
 		fmt.Println("This game is for 2-4 players")
 		os.Exit(1)
 	}
 
-	for i := 0; i < playerCount; i++ {
+	for i := 0; i < plrCount; i++ {
 		p := player{ID: i}
 		plrs = append(plrs, &p)
 		remainder := bank.TransferTo(3, &p.Coins)
@@ -401,12 +400,23 @@ func main() {
 			}
 		}
 
-		for _, card := range supplyCards.FindByRoll(r) {
-			card.Effect.Call(*card, rlr, plrs)
+		// For each active card apply effects in reverse order of players.
+		// Roller should get money from bank, then money from players before
+		// other players receive payouts.
+		cards := supplyCards.FindByRoll(r)
+
+		for i := 0; i < len(plrs); i++ {
+			p := plrs[(len(plrs)+rlr.ID-i)%len(plrs)]
+
+			for _, card := range cards {
+				c := p.SupplyCards[card.Name]
+				if c > 0 {
+					card.Effect.Call(*card, rlr, p, c)
+				}
+			}
 		}
 
 		didAction = promptSupplyCardPurchase(rlr)
-
 		if didAction {
 			didAction = false
 		} else {
@@ -574,7 +584,8 @@ func promptRoll(choice bool) (int, bool, error) {
 		r += die
 	}
 
-	return r, doubles, nil
+	// return r, doubles, nil
+	return 3, doubles, nil
 }
 
 func printPlayerStatus() {

@@ -5,8 +5,9 @@ import (
 )
 
 type effect struct {
+	Priority    int
 	Description func() string
-	Call        func(card supplyCard, rlr *player, all []*player)
+	Call        func(card supplyCard, rlr *player, p *player, c int)
 }
 
 func landmarkCardAgumentedPayout(payout int, card supplyCard, p *player) int {
@@ -33,31 +34,24 @@ func newBankPayout(payout int, onlyCurrent bool) effect {
 	}
 
 	return effect{
+		Priority: 0,
+
 		Description: func() string {
 			return fmt.Sprintf("Get %s from the bank on %s", coins, receiverName)
 		},
 
-		Call: func(card supplyCard, rlr *player, all []*player) {
-			var receivers []*player
-
-			if onlyCurrent {
-				receivers = []*player{rlr}
-			} else {
-				receivers = counterClockwise(all, rlr)
+		Call: func(card supplyCard, rlr *player, p *player, c int) {
+			if onlyCurrent && p != rlr {
+				return
 			}
 
-			for _, p := range receivers {
-				cardCount := p.SupplyCards[card.Name]
-				totalPayout := landmarkCardAgumentedPayout(payout, card, p) * cardCount
-				if cardCount == 0 {
-					continue
-				}
-				fmt.Printf("Player %d gets %d coins from the bank [%s].\n", p.ID, totalPayout, card.Name)
-				remainder := bank.TransferTo(totalPayout, &p.Coins)
+			totalPayout := landmarkCardAgumentedPayout(payout, card, p) * c
 
-				if remainder > 0 {
-					fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
-				}
+			fmt.Printf("Player %d gets %d coins from the bank [%s].\n", p.ID, totalPayout, card.Name)
+			remainder := bank.TransferTo(totalPayout, &p.Coins)
+
+			if remainder > 0 {
+				fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
 			}
 		},
 	}
@@ -81,27 +75,24 @@ func newRollerPayout(payout int) effect {
 	}
 
 	return effect{
+		Priority: 2,
+
 		Description: func() string {
 			return fmt.Sprintf("Get %s from the player who rolled the dice", coins)
 		},
 
-		Call: func(card supplyCard, rlr *player, all []*player) {
-			receivers := counterClockwise(all, rlr)
-			for _, p := range receivers {
-				if p == rlr {
-					continue
-				}
-				cardCount := p.SupplyCards[card.Name]
-				totalPayout := landmarkCardAgumentedPayout(payout, card, p) * cardCount
-				if cardCount == 0 {
-					continue
-				}
-				fmt.Printf("Player %d gets %d coins from the player %d [%s].\n", p.ID, totalPayout, rlr.ID, card.Name)
-				remainder := rlr.Coins.TransferTo(totalPayout, &p.Coins)
+		Call: func(card supplyCard, rlr *player, p *player, c int) {
+			if p == rlr {
+				return
+			}
 
-				if remainder > 0 {
-					fmt.Printf("Roller did not have enough money. Missing: %d\n", remainder)
-				}
+			totalPayout := landmarkCardAgumentedPayout(payout, card, p) * c
+
+			fmt.Printf("Player %d gets %d coins from the player %d [%s].\n", p.ID, totalPayout, rlr.ID, card.Name)
+			remainder := rlr.Coins.TransferTo(totalPayout, &p.Coins)
+
+			if remainder > 0 {
+				fmt.Printf("Roller did not have enough money. Missing: %d\n", remainder)
 			}
 		},
 	}
@@ -109,24 +100,25 @@ func newRollerPayout(payout int) effect {
 
 func newIconCardPayout(payout int, icon string) effect {
 	return effect{
+		Priority: 0,
+
 		Description: func() string {
 			return fmt.Sprintf("Get %d coins from the bank for each [%s] establishment that you own on your turn only", payout, icon)
 		},
 
-		Call: func(card supplyCard, rlr *player, all []*player) {
-			cardCount := rlr.SupplyCards[card.Name]
-			iconCards := supplyCards.FindByIcon(icon)
-			iconCardCount := 0
-			for _, iconCard := range iconCards {
-				iconCardCount += rlr.SupplyCards[iconCard.Name]
-			}
-			totalPayout := payout * iconCardCount * cardCount
-
-			if cardCount == 0 {
+		Call: func(card supplyCard, rlr *player, p *player, c int) {
+			if p != rlr {
 				return
 			}
 
-			fmt.Printf("Player %d gets %d coins from the bank [%s].\n", rlr.ID, totalPayout, card.Name)
+			iconCards := supplyCards.FindByIcon(icon)
+			iconCardCount := 0
+			for _, iconCard := range iconCards {
+				iconCardCount += p.SupplyCards[iconCard.Name]
+			}
+			totalPayout := payout * iconCardCount * c
+
+			fmt.Printf("Player %d gets %d coins from the bank [%s].\n", p.ID, totalPayout, card.Name)
 			remainder := bank.TransferTo(totalPayout, &rlr.Coins)
 
 			if remainder > 0 {
