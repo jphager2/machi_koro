@@ -510,7 +510,7 @@ func postInit() {
 }
 
 func initBasic() {
-	market = newMarketplace(basicSupplyCards)
+	market = newBasicMarketplace(basicSupplyCards)
 	landmarkCardsSorted = []landmarkCard{
 		trainStation,
 		shoppingMall,
@@ -521,7 +521,7 @@ func initBasic() {
 }
 
 func initHarbor() {
-	market = newMarketplace(append(basicSupplyCards, harborSupplyCards...))
+	market = newExpansionMarketplace(append(basicSupplyCards, harborSupplyCards...))
 	landmarkCardsSorted = []landmarkCard{
 		cityHall,
 		harbor,
@@ -535,7 +535,7 @@ func initHarbor() {
 }
 
 func initMillionaire() {
-	market = newMarketplace(append(basicSupplyCards, millionaireSupplyCards...))
+	market = newExpansionMarketplace(append(basicSupplyCards, millionaireSupplyCards...))
 	landmarkCardsSorted = []landmarkCard{
 		cityHall,
 		trainStation,
