@@ -7,7 +7,7 @@ import (
 type effect struct {
 	Priority    int
 	Description func() string
-	Call        func(card supplyCard, rlr *player, p *player, c int)
+	Call        func(card supplyCard, rlr *player, p *player, c int, specialRoll int)
 }
 
 func landmarkCardAgumentedPayout(payout int, card supplyCard, p *player) int {
@@ -34,13 +34,13 @@ func newBankPayout(payout int, onlyCurrent bool) effect {
 	}
 
 	return effect{
-		Priority: 0,
+		Priority: 1,
 
 		Description: func() string {
 			return fmt.Sprintf("Get %s from the bank on %s", coins, receiverName)
 		},
 
-		Call: func(card supplyCard, rlr *player, p *player, c int) {
+		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
 			if onlyCurrent && p != rlr {
 				return
 			}
@@ -65,7 +65,7 @@ func newRollerBankPayout(r int) effect {
 	return newBankPayout(r, true)
 }
 
-func newRollerPayout(payout int) effect {
+func newRollerPayoutWithPrereq(payout int, prereq string) effect {
 	var coins string
 
 	if payout == 1 {
@@ -75,14 +75,21 @@ func newRollerPayout(payout int) effect {
 	}
 
 	return effect{
-		Priority: 2,
+		Priority: 0,
 
 		Description: func() string {
-			return fmt.Sprintf("Get %s from the player who rolled the dice", coins)
+			desc := fmt.Sprintf("Get %s from the player who rolled the dice", coins)
+			if prereq != "" {
+				desc = fmt.Sprintf("If you have the [%s] landmark. %s", prereq, desc)
+			}
+			return desc
 		},
 
-		Call: func(card supplyCard, rlr *player, p *player, c int) {
+		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
 			if p == rlr {
+				return
+			}
+			if prereq != "" && !rlr.LandmarkCards[prereq] {
 				return
 			}
 
@@ -98,25 +105,55 @@ func newRollerPayout(payout int) effect {
 	}
 }
 
+func newRollerPayout(payout int) effect {
+	return newRollerPayoutWithPrereq(payout, "")
+}
+
 func newIconCardPayout(payout int, icon string) effect {
 	return effect{
-		Priority: 0,
+		Priority: 1,
 
 		Description: func() string {
 			return fmt.Sprintf("Get %d coins from the bank for each [%s] establishment that you own on your turn only", payout, icon)
 		},
 
-		Call: func(card supplyCard, rlr *player, p *player, c int) {
+		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
 			if p != rlr {
 				return
 			}
 
-			iconCards := supplyCards.FindByIcon(icon)
+			iconCards := market.FindByIcon(icon)
 			iconCardCount := 0
 			for _, iconCard := range iconCards {
 				iconCardCount += p.SupplyCards[iconCard.Name]
 			}
-			totalPayout := payout * iconCardCount * c
+			totalPayout := landmarkCardAgumentedPayout(payout, card, p) * iconCardCount * c
+
+			fmt.Printf("Player %d gets %d coins from the bank [%s].\n", p.ID, totalPayout, card.Name)
+			remainder := bank.TransferTo(totalPayout, &rlr.Coins)
+
+			if remainder > 0 {
+				fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
+			}
+		},
+	}
+}
+
+func newCardPayout(payout int, cardName string) effect {
+	return effect{
+		Priority: 1,
+
+		Description: func() string {
+			return fmt.Sprintf("Get %d coins from the bank for each [%s] establishment that you own on your turn only", payout, cardName)
+		},
+
+		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
+			if p != rlr {
+				return
+			}
+
+			cardCount := p.SupplyCards[cardName]
+			totalPayout := landmarkCardAgumentedPayout(payout, card, p) * cardCount * c
 
 			fmt.Printf("Player %d gets %d coins from the bank [%s].\n", p.ID, totalPayout, card.Name)
 			remainder := bank.TransferTo(totalPayout, &rlr.Coins)

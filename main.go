@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -26,6 +27,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	version, err := promptVersionChoice()
+
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	version.Init()
+
 	for i := 0; i < plrCount; i++ {
 		p := player{ID: i}
 		plrs = append(plrs, &p)
@@ -39,8 +48,8 @@ func main() {
 		p.SupplyCards["Bakery"]++
 
 		p.LandmarkCards = make(map[string]bool)
-		for landmarkName := range landmarkCards {
-			p.LandmarkCards[landmarkName] = false
+		for _, landmark := range landmarkCardsSorted {
+			p.LandmarkCards[landmark.Name] = landmark.Cost == 0
 		}
 	}
 
@@ -73,19 +82,47 @@ func main() {
 			}
 		}
 
-		// For each active card apply effects in reverse order of players.
-		// Roller should get money from bank, then money from players before
-		// other players receive payouts.
-		cards := supplyCards.FindByRoll(r)
+		if r >= 10 && rlr.LandmarkCards["Harbor"] {
+			fmt.Print("Do you want to add 2 to your roll? ")
 
+			if res := promptBool(); res {
+				r += 2
+			}
+		}
+
+		// Card effects should be applied in priority order, first red cards, then
+		// green/blue cards, then purple cards.
+		cards := market.FindByRoll(r)
+		// This two dice roll is used for some card effects to determine payouts.  It
+		// should only be rolled once per roll.
+		specialRoll := (rand.Intn(11) + 1)
 		for i := 0; i < len(plrs); i++ {
 			p := plrs[(len(plrs)+rlr.ID-i)%len(plrs)]
 
 			for _, card := range cards {
 				c := p.SupplyCards[card.Name]
 				if c > 0 {
-					card.Effect.Call(*card, rlr, p, c)
+
+					card.Effect.Call(*card, rlr, p, c, specialRoll)
 				}
+			}
+		}
+
+		if doubles && rlr.LandmarkCards["Amusement Park"] {
+			fmt.Print("You got doubles, do you want to roll again? ")
+
+			if res := promptBool(); res {
+				continue
+			}
+		}
+
+		if rlr.Coins.Total() == 0 && rlr.LandmarkCards["City Hall"] {
+			fmt.Println("Getting 1 coin from the bank, since you didn't have any")
+
+			remainder := bank.TransferTo(1, &rlr.Coins)
+
+			if remainder > 0 {
+				fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
 			}
 		}
 
@@ -94,6 +131,16 @@ func main() {
 			didAction = false
 		} else {
 			didAction = promptLandmarkCardPurchase(rlr)
+		}
+
+		if !didAction && rlr.LandmarkCards["Airport"] {
+			fmt.Println("Getting 10 coins from the bank, since you didn't buy anything")
+
+			remainder := bank.TransferTo(10, &rlr.Coins)
+
+			if remainder > 0 {
+				fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
+			}
 		}
 
 		winner := true
@@ -106,10 +153,6 @@ func main() {
 		if winner {
 			fmt.Printf("Player %d has won the game!\n", rlr.ID)
 			os.Exit(0)
-		}
-
-		if doubles && rlr.LandmarkCards["Amusement Park"] {
-			continue
 		}
 
 		turn = (turn + 1) % len(plrs)
@@ -159,7 +202,7 @@ func promptSupplyCardPurchase(rlr *player) bool {
 	choices := []int{}
 	choiceNames := []string{}
 	fmt.Println("Establishments: ")
-	for _, card := range supplyCards.Cards {
+	for _, card := range market.Cards {
 		if card.Supply == 0 {
 			continue
 		}
@@ -177,7 +220,7 @@ func promptSupplyCardPurchase(rlr *player) bool {
 		return false
 	}
 	supplyCardName := choiceNames[supplyCardIdx-1]
-	card := supplyCards.FindByName(supplyCardName)
+	card := market.FindByName(supplyCardName)
 
 	if rlr.Coins.Total() < card.Cost {
 		fmt.Printf("Player %d does not have enough coins to buy %s\n", rlr.ID, supplyCardName)
@@ -230,6 +273,26 @@ func promptLandmarkCardPurchase(rlr *player) bool {
 	}
 
 	return true
+}
+
+func promptVersionChoice() (gameVersion, error) {
+	var choice gameVersion
+	choices := []int{}
+	choiceNames := []string{}
+	fmt.Println("Versions: ")
+	for i, version := range gameVersionsSorted {
+		choices = append(choices, i)
+		choiceNames = append(choiceNames, version.Name)
+		fmt.Printf("  (%d) %s \n", i+1, version.Name)
+	}
+
+	fmt.Print("Which version do you want to play? ")
+	versionIdx, err := scanInt(choices)
+	if err != nil {
+		return choice, errors.New("No version selected.")
+	}
+
+	return gameVersionsSorted[versionIdx-1], nil
 }
 
 func promptDieCount(choice bool) (int, error) {

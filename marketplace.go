@@ -1,11 +1,18 @@
 package main
 
-type supplyCardCollection struct {
+// TODO: Marketplace should manage the available and supply of cards
+//       For example in harbor and millionaire's row not all cards are on the table at all times
+//       In the english version it simply picks 10 cards at time. In the Czech version there are
+//         * 5 cards 1-6
+//         * 5 cards 7+
+//         * 2 cards Major establishments
+//
+type marketplace struct {
 	Cards            []*supplyCard
 	PrioritizedCards []*supplyCard
 }
 
-func newSupplyCardCollection(cards []*supplyCard) supplyCardCollection {
+func newMarketplace(cards []*supplyCard) marketplace {
 	var prioritized []*supplyCard
 
 	for i := 0; i < 3; i++ {
@@ -16,13 +23,13 @@ func newSupplyCardCollection(cards []*supplyCard) supplyCardCollection {
 		}
 	}
 
-	return supplyCardCollection{
+	return marketplace{
 		Cards:            cards,
 		PrioritizedCards: prioritized,
 	}
 }
 
-func (s *supplyCardCollection) FindByIcon(icon string) []*supplyCard {
+func (s *marketplace) FindByIcon(icon string) []*supplyCard {
 	var found []*supplyCard
 
 	for i := range s.Cards {
@@ -36,7 +43,7 @@ func (s *supplyCardCollection) FindByIcon(icon string) []*supplyCard {
 	return found
 }
 
-func (s *supplyCardCollection) FindByName(name string) *supplyCard {
+func (s *marketplace) FindByName(name string) *supplyCard {
 	for i := range s.Cards {
 		card := s.Cards[i]
 
@@ -48,7 +55,7 @@ func (s *supplyCardCollection) FindByName(name string) *supplyCard {
 	return &supplyCard{}
 }
 
-func (s *supplyCardCollection) FindByRoll(roll int) []*supplyCard {
+func (s *marketplace) FindByRoll(roll int) []*supplyCard {
 	var found []*supplyCard
 
 	for i := range s.PrioritizedCards {
@@ -63,13 +70,4 @@ func (s *supplyCardCollection) FindByRoll(roll int) []*supplyCard {
 	}
 
 	return found
-}
-
-type supplyCard struct {
-	Name          string
-	Cost          int
-	ActiveNumbers []int
-	Effect        effect
-	Icon          string
-	Supply        int
 }
