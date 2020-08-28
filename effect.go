@@ -10,6 +10,19 @@ type effect struct {
 	Call        func(card supplyCard, rlr *player, p *player, c int, specialRoll int)
 }
 
+type prereq struct {
+	Desc string
+	Call func(card supplyCard, rlr *player, p *player, c int, specialRoll int) bool
+}
+
+var nullPrereq = prereq{
+	Desc: "",
+
+	Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) bool {
+		return true
+	},
+}
+
 func landmarkCardAgumentedPayout(payout int, card supplyCard, p *player) int {
 	if p.LandmarkCards["Shopping Mall"] && (card.Icon == "Cup" || card.Icon == "Bread") {
 		return payout + 1
@@ -17,7 +30,7 @@ func landmarkCardAgumentedPayout(payout int, card supplyCard, p *player) int {
 	return payout
 }
 
-func newBankPayout(payout int, onlyCurrent bool) effect {
+func newBankPayoutWithPrereq(payout int, onlyCurrent bool, fromBank bool, pr prereq) effect {
 	var coins string
 	var receiverName string
 
@@ -37,11 +50,18 @@ func newBankPayout(payout int, onlyCurrent bool) effect {
 		Priority: 1,
 
 		Description: func() string {
-			return fmt.Sprintf("Get %s from the bank on %s", coins, receiverName)
+			if fromBank {
+				return pr.Desc + fmt.Sprintf("Get %s from the bank on %s", coins, receiverName)
+			}
+
+			return pr.Desc + fmt.Sprintf("Pay %s to the bank on %s", coins, receiverName)
 		},
 
 		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
 			if onlyCurrent && p != rlr {
+				return
+			}
+			if !pr.Call(card, rlr, p, c, specialRoll) {
 				return
 			}
 
@@ -58,14 +78,26 @@ func newBankPayout(payout int, onlyCurrent bool) effect {
 }
 
 func newAllBankPayout(r int) effect {
-	return newBankPayout(r, false)
+	return newBankPayoutWithPrereq(r, false, true, nullPrereq)
+}
+
+func newAllBankPayoutWithPrereq(r int, pr prereq) effect {
+	return newBankPayoutWithPrereq(r, false, true, pr)
 }
 
 func newRollerBankPayout(r int) effect {
-	return newBankPayout(r, true)
+	return newBankPayoutWithPrereq(r, true, true, nullPrereq)
 }
 
-func newRollerPayoutWithPrereq(payout int, prereq string) effect {
+func newBankRollerPayout(r int) effect {
+	return newBankPayoutWithPrereq(r, true, false, nullPrereq)
+}
+
+func newRollerBankPayoutWithPrereq(r int, pr prereq) effect {
+	return newBankPayoutWithPrereq(r, true, true, pr)
+}
+
+func newRollerPayoutWithPrereq(payout int, pr prereq) effect {
 	var coins string
 
 	if payout == 1 {
@@ -78,10 +110,7 @@ func newRollerPayoutWithPrereq(payout int, prereq string) effect {
 		Priority: 0,
 
 		Description: func() string {
-			desc := fmt.Sprintf("Get %s from the player who rolled the dice", coins)
-			if prereq != "" {
-				desc = fmt.Sprintf("If you have the [%s] landmark. %s", prereq, desc)
-			}
+			desc := pr.Desc + fmt.Sprintf("Get %s from the player who rolled the dice", coins)
 			return desc
 		},
 
@@ -89,7 +118,7 @@ func newRollerPayoutWithPrereq(payout int, prereq string) effect {
 			if p == rlr {
 				return
 			}
-			if prereq != "" && !rlr.LandmarkCards[prereq] {
+			if !pr.Call(card, rlr, p, c, specialRoll) {
 				return
 			}
 
@@ -105,8 +134,46 @@ func newRollerPayoutWithPrereq(payout int, prereq string) effect {
 	}
 }
 
+func newLandmarkPrereq(name string, forRoller bool) prereq {
+	return prereq{
+		Desc: fmt.Sprintf("If you have the [%s] landmark. ", name),
+		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) bool {
+			if forRoller {
+				return rlr.LandmarkCards[name]
+			}
+			return p.LandmarkCards[name]
+		},
+	}
+}
+
+func newLandmarkMaxPrereq(max int) prereq {
+	return prereq{
+		Desc: fmt.Sprintf("If player has the less than %d constructed landmarks (excluding City Hall). ", max+1),
+		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) bool {
+			if rlr.LandmarkCards["City Hall"] {
+				return len(rlr.LandmarkCards)-1 < max
+			}
+
+			return len(rlr.LandmarkCards) < max
+		},
+	}
+}
+
+func newLandmarkMinPrereq(min int) prereq {
+	return prereq{
+		Desc: fmt.Sprintf("If player has the more than %d constructed landmarks (excluding City Hall). ", min+1),
+		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) bool {
+			if rlr.LandmarkCards["City Hall"] {
+				return len(rlr.LandmarkCards)-1 > min
+			}
+
+			return len(rlr.LandmarkCards) > min
+		},
+	}
+}
+
 func newRollerPayout(payout int) effect {
-	return newRollerPayoutWithPrereq(payout, "")
+	return newRollerPayoutWithPrereq(payout, nullPrereq)
 }
 
 func newIconCardPayout(payout int, icon string) effect {

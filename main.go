@@ -209,11 +209,16 @@ func promptSupplyCardPurchase(rlr *player) bool {
 			fmt.Printf("Count is 0!!! %v", card)
 			continue
 		}
+		// Some cards have negative cost (i.e. get money from the bank)
+		displayCost := card.Cost
+		if displayCost < 0 {
+			displayCost = 0
+		}
 
 		i++
 		choices = append(choices, i)
 		choiceNames = append(choiceNames, card.Name)
-		fmt.Printf("  (%d) %s [%d coins] (%d left): %s\n", i, card.Name, card.Cost, count, card.Effect.Description())
+		fmt.Printf("  (%d) %s [%d coins] (%d left): %s\n", i, card.Name, displayCost, count, card.Effect.Description())
 	}
 
 	fmt.Print("Which establishment do you want to buy? ")
@@ -229,7 +234,11 @@ func promptSupplyCardPurchase(rlr *player) bool {
 		fmt.Printf("Player %d does not have enough coins to buy %s\n", rlr.ID, supplyCardName)
 	} else {
 		fmt.Printf("Player %d buys %s\n", rlr.ID, supplyCardName)
-		rlr.Coins.TransferTo(card.Cost, &bank)
+		if card.Cost > 0 {
+			rlr.Coins.TransferTo(card.Cost, &bank)
+		} else if card.Cost < 0 {
+			bank.TransferTo(card.Cost, &rlr.Coins)
+		}
 		rlr.SupplyCards[supplyCardName]++
 		market.Purchase(card.Name)
 	}

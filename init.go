@@ -15,6 +15,46 @@ var (
 		TenCoins:  12,
 	}
 
+	renovationCompanyEffect = effect{
+		Priority: 1,
+
+		Description: func() string {
+			return "Choose a non-[Major] building. All buildings owned by any player of that type are closed for renovations. Get 1 coin from the bank for each building closed for renovation, on your turn only."
+		},
+
+		// TODO
+		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
+			totalPayout := specialRoll * c
+
+			fmt.Printf("Player %d gets %d coins from the bank [%s].\n", p.ID, totalPayout, card.Name)
+			remainder := bank.TransferTo(totalPayout, &p.Coins)
+
+			if remainder > 0 {
+				fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
+			}
+		},
+	}
+
+	demolitionCompanyEffect = effect{
+		Priority: 1,
+
+		Description: func() string {
+			return "For each Demolition Company you own, you must demolish a constructed landmark and take 8 coins from the bank"
+		},
+
+		// TODO
+		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
+			totalPayout := specialRoll * c
+
+			fmt.Printf("Player %d gets %d coins from the bank [%s].\n", p.ID, totalPayout, card.Name)
+			remainder := bank.TransferTo(totalPayout, &p.Coins)
+
+			if remainder > 0 {
+				fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
+			}
+		},
+	}
+
 	tunaBoatEffect = effect{
 		Priority: 1,
 
@@ -23,6 +63,10 @@ var (
 		},
 
 		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
+			if !p.LandmarkCards["Harbor"] {
+				return
+			}
+
 			totalPayout := specialRoll * c
 
 			fmt.Printf("Player %d gets %d coins from the bank [%s].\n", p.ID, totalPayout, card.Name)
@@ -284,6 +328,9 @@ var (
 		Description: "If you do not build on your turn, you may take 10 coins from the bank",
 	}
 
+	lessThanTwoLandmarksPrereq = newLandmarkMaxPrereq(2)
+	moreThanTwoLandmarksPrereq = newLandmarkMinPrereq(1)
+
 	basicSupplyCards = []*supplyCard{
 		&supplyCard{
 			Name:          "Wheat Field",
@@ -436,7 +483,7 @@ var (
 			Name:          "Sushi Bar",
 			Cost:          1,
 			ActiveNumbers: []int{1},
-			Effect:        newRollerPayoutWithPrereq(1, "Harbor"),
+			Effect:        newRollerPayoutWithPrereq(1, newLandmarkPrereq("Harbor", false)),
 			Icon:          "Cup",
 			Supply:        6,
 		},
@@ -492,12 +539,60 @@ var (
 
 	millionaireSupplyCards = []*supplyCard{
 		&supplyCard{
-			Name:          "Wheat Field",
-			Cost:          1,
-			ActiveNumbers: []int{1},
-			Effect:        newAllBankPayout(1),
+			Name:          "General Store",
+			Cost:          0,
+			ActiveNumbers: []int{2},
+			Effect:        newRollerBankPayoutWithPrereq(2, lessThanTwoLandmarksPrereq),
+			Icon:          "Bread",
+			Supply:        6,
+		},
+		&supplyCard{
+			Name:          "Corn Field",
+			Cost:          2,
+			ActiveNumbers: []int{3, 4},
+			Effect:        newAllBankPayoutWithPrereq(1, lessThanTwoLandmarksPrereq),
 			Icon:          "Wheat",
 			Supply:        6,
+		},
+		&supplyCard{
+			Name:          "Demolition Company",
+			Cost:          2,
+			ActiveNumbers: []int{4},
+			Effect:        demolitionCompanyEffect,
+			Icon:          "Suitcase",
+			Supply:        6,
+		},
+		&supplyCard{
+			Name:          "Loan Office",
+			Cost:          -5,
+			ActiveNumbers: []int{5, 6},
+			Effect:        newBankRollerPayout(2),
+			Icon:          "Suitcase",
+			Supply:        6,
+		},
+		&supplyCard{
+			Name:          "French Restaurant",
+			Cost:          3,
+			ActiveNumbers: []int{5},
+			Effect:        newRollerPayoutWithPrereq(5, moreThanTwoLandmarksPrereq),
+			Icon:          "Cup",
+			Supply:        6,
+		},
+		&supplyCard{
+			Name:          "Vineyard",
+			Cost:          3,
+			ActiveNumbers: []int{7},
+			Effect:        newAllBankPayout(3),
+			Icon:          "Wheat",
+			Supply:        6,
+		},
+		&supplyCard{
+			Name:          "Renovation Company",
+			Cost:          4,
+			ActiveNumbers: []int{8},
+			Effect:        renovationCompanyEffect,
+			Icon:          "Major",
+			Supply:        4,
 		},
 	}
 )
