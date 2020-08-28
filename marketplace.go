@@ -253,7 +253,7 @@ func removePart(count map[string]int, name string) (map[string]int, bool, bool) 
 		deleted = true
 	}
 
-	return count, ok, deleted
+	return count, deleted, ok
 }
 
 func resupplyPart(count map[string]int, cards []*supplyCard, max int) (map[string]int, []*supplyCard) {
