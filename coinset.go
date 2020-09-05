@@ -10,6 +10,9 @@ func (c *coinSet) Total() int {
 	return c.OneCoins + c.FiveCoins*5 + c.TenCoins*10
 }
 
+// TODO this doesn't work, right? This is too complicated anyway... just use
+// absolute numbers ... or do it right, which means you should try to trade
+// coins with the player or the bank...
 func (c *coinSet) Sub(amount int) (int, int, int, int) {
 	var ones int
 	var fives int

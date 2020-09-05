@@ -9,13 +9,6 @@ import (
 	"strings"
 )
 
-type player struct {
-	ID            int
-	SupplyCards   map[string]int
-	LandmarkCards map[string]bool
-	Coins         coinSet
-}
-
 func main() {
 	fmt.Println("machi koro!")
 
@@ -43,9 +36,9 @@ func main() {
 		if remainder > 0 {
 			fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
 		}
-		p.SupplyCards = make(map[string]int)
-		p.SupplyCards["Wheat Field"]++
-		p.SupplyCards["Bakery"]++
+		p.SupplyCards = make(map[string]*playerCard)
+		p.SupplyCards["Wheat Field"] = &playerCard{Total: 1, Renovation: 0}
+		p.SupplyCards["Bakery"] = &playerCard{Total: 1, Renovation: 0}
 
 		p.LandmarkCards = make(map[string]bool)
 		for _, landmark := range landmarkCardsSorted {
@@ -100,10 +93,14 @@ func main() {
 			p := plrs[(len(plrs)+rlr.ID-i)%len(plrs)]
 
 			for _, card := range cards {
-				c := p.SupplyCards[card.Name]
+				pc, ok := p.SupplyCards[card.Name]
+				if !ok {
+					continue
+				}
+				c := pc.Active()
+				pc.Renovation = 0
 				if c > 0 {
-
-					card.Effect.Call(*card, rlr, p, c, specialRoll)
+					card.Effect.Call(*card, rlr, p, c, pc, specialRoll)
 				}
 			}
 		}
@@ -155,8 +152,27 @@ func main() {
 			os.Exit(0)
 		}
 
+		turnInvestmentMax := rlr.SupplyCards["Tech Startup"].Total
+		if turnInvestmentMax > 0 {
+			promptInvestment(rlr, turnInvestmentMax)
+		}
+
 		turn = (turn + 1) % len(plrs)
 	}
+}
+
+func promptInvestment(rlr *player, max int) {
+	fmt.Printf("How much do you want to invest into your Tech Startups (max %d)\n", max)
+	var choices []int
+	for i := 0; i < max; i++ {
+		choices = append(choices, i+1)
+	}
+	investment, err := scanInt(choices)
+	if err != nil {
+		fmt.Println("No investment made.")
+		return
+	}
+	rlr.Coins.TransferTo(investment, &rlr.Investment)
 }
 
 func promptBool() bool {
@@ -239,7 +255,7 @@ func promptSupplyCardPurchase(rlr *player) bool {
 		} else if card.Cost < 0 {
 			bank.TransferTo(card.Cost, &rlr.Coins)
 		}
-		rlr.SupplyCards[supplyCardName]++
+		rlr.SupplyCards[supplyCardName].Total++
 		market.Purchase(card.Name)
 	}
 	return true
@@ -293,7 +309,7 @@ func promptVersionChoice() (gameVersion, error) {
 	choiceNames := []string{}
 	fmt.Println("Versions: ")
 	for i, version := range gameVersionsSorted {
-		choices = append(choices, i)
+		choices = append(choices, i+1)
 		choiceNames = append(choiceNames, version.Name)
 		fmt.Printf("  (%d) %s \n", i+1, version.Name)
 	}

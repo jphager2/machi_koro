@@ -7,18 +7,18 @@ import (
 type effect struct {
 	Priority    int
 	Description func() string
-	Call        func(card supplyCard, rlr *player, p *player, c int, specialRoll int)
+	Call        func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int)
 }
 
 type prereq struct {
 	Desc string
-	Call func(card supplyCard, rlr *player, p *player, c int, specialRoll int) bool
+	Call func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) bool
 }
 
 var nullPrereq = prereq{
 	Desc: "",
 
-	Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) bool {
+	Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) bool {
 		return true
 	},
 }
@@ -57,11 +57,11 @@ func newBankPayoutWithPrereq(payout int, onlyCurrent bool, fromBank bool, pr pre
 			return pr.Desc + fmt.Sprintf("Pay %s to the bank on %s", coins, receiverName)
 		},
 
-		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
 			if onlyCurrent && p != rlr {
 				return
 			}
-			if !pr.Call(card, rlr, p, c, specialRoll) {
+			if !pr.Call(card, rlr, p, c, pc, specialRoll) {
 				return
 			}
 
@@ -114,11 +114,11 @@ func newRollerPayoutWithPrereq(payout int, pr prereq) effect {
 			return desc
 		},
 
-		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
 			if p == rlr {
 				return
 			}
-			if !pr.Call(card, rlr, p, c, specialRoll) {
+			if !pr.Call(card, rlr, p, c, pc, specialRoll) {
 				return
 			}
 
@@ -137,7 +137,7 @@ func newRollerPayoutWithPrereq(payout int, pr prereq) effect {
 func newLandmarkPrereq(name string, forRoller bool) prereq {
 	return prereq{
 		Desc: fmt.Sprintf("If you have the [%s] landmark. ", name),
-		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) bool {
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) bool {
 			if forRoller {
 				return rlr.LandmarkCards[name]
 			}
@@ -149,7 +149,7 @@ func newLandmarkPrereq(name string, forRoller bool) prereq {
 func newLandmarkMaxPrereq(max int) prereq {
 	return prereq{
 		Desc: fmt.Sprintf("If player has the less than %d constructed landmarks (excluding City Hall). ", max+1),
-		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) bool {
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) bool {
 			if rlr.LandmarkCards["City Hall"] {
 				return len(rlr.LandmarkCards)-1 < max
 			}
@@ -162,7 +162,7 @@ func newLandmarkMaxPrereq(max int) prereq {
 func newLandmarkMinPrereq(min int) prereq {
 	return prereq{
 		Desc: fmt.Sprintf("If player has the more than %d constructed landmarks (excluding City Hall). ", min+1),
-		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) bool {
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) bool {
 			if rlr.LandmarkCards["City Hall"] {
 				return len(rlr.LandmarkCards)-1 > min
 			}
@@ -184,7 +184,7 @@ func newIconCardPayout(payout int, icon string) effect {
 			return fmt.Sprintf("Get %d coins from the bank for each [%s] establishment that you own on your turn only", payout, icon)
 		},
 
-		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
 			if p != rlr {
 				return
 			}
@@ -192,7 +192,7 @@ func newIconCardPayout(payout int, icon string) effect {
 			iconCards := market.FindByIcon(icon)
 			iconCardCount := 0
 			for _, iconCard := range iconCards {
-				iconCardCount += p.SupplyCards[iconCard.Name]
+				iconCardCount += p.SupplyCards[iconCard.Name].Total
 			}
 			totalPayout := landmarkCardAgumentedPayout(payout, card, p) * iconCardCount * c
 
@@ -214,12 +214,12 @@ func newCardPayout(payout int, cardName string) effect {
 			return fmt.Sprintf("Get %d coins from the bank for each [%s] establishment that you own on your turn only", payout, cardName)
 		},
 
-		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
 			if p != rlr {
 				return
 			}
 
-			cardCount := p.SupplyCards[cardName]
+			cardCount := p.SupplyCards[cardName].Total
 			totalPayout := landmarkCardAgumentedPayout(payout, card, p) * cardCount * c
 
 			fmt.Printf("Player %d gets %d coins from the bank [%s].\n", p.ID, totalPayout, card.Name)

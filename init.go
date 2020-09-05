@@ -15,16 +15,96 @@ var (
 		TenCoins:  12,
 	}
 
-	renovationCompanyEffect = effect{
+	atLeastThreeLandmarks = newLandmarkMinPrereq(2)
+	membersOnlyClubEffect = effect{
 		Priority: 1,
 
 		Description: func() string {
-			return "Choose a non-[Major] building. All buildings owned by any player of that type are closed for renovations. Get 1 coin from the bank for each building closed for renovation, on your turn only."
+			return atLeastThreeLandmarks.Desc + "If the player who rolled the dice has 3 or more constructed landmarks, get all of their coins."
 		},
 
-		// TODO
-		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
-			totalPayout := specialRoll * c
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
+			if p == rlr {
+				return
+			}
+			if !atLeastThreeLandmarks.Call(card, rlr, p, c, pc, specialRoll) {
+				return
+			}
+
+			totalPayout := rlr.Coins.Total()
+
+			fmt.Printf("Player %d gets %d coins from the player %d [%s].\n", p.ID, totalPayout, rlr.ID, card.Name)
+			remainder := bank.TransferTo(totalPayout, &p.Coins)
+
+			if remainder > 0 {
+				fmt.Printf("Roller did not have enough money. Missing: %d\n", remainder)
+			}
+		},
+	}
+
+	parkEffect = effect{
+		Priority: 2,
+
+		Description: func() string {
+			return "Redistribute all players' coins evenly among all players (if there is an uneven amount of coins, take coins from the bank to make up the difference), on your turn only"
+		},
+
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
+			if p != rlr {
+				return
+			}
+
+			var hoard coinSet
+
+			for _, plr := range plrs {
+				fmt.Printf("Player %d puts %d coins into the redistribution.\n", p.ID, plr.Coins.Total())
+				plr.Coins.TransferTo(plr.Coins.Total(), &hoard)
+			}
+
+			totalPayout := hoard.Total() / len(plrs)
+			missing := hoard.Total() % len(plrs)
+			remainder := bank.TransferTo(missing, &hoard)
+			if remainder > 0 {
+				fmt.Printf("Bank did not have enough money to fill up the redistribution. Missing: %d\n", remainder)
+			}
+			// If there is missing coins, total payout is 1 short
+			if missing > 0 {
+				totalPayout++
+			}
+
+			for _, plr := range counterClockwise(plrs, rlr) {
+				fmt.Printf("Player %d gets %d coins from the redistribution [%s].\n", p.ID, totalPayout, card.Name)
+				remainder = hoard.TransferTo(totalPayout, &plr.Coins)
+
+				if remainder > 0 {
+					fmt.Printf("Redistribution did not have enough money. Missing: %d\n", remainder)
+				}
+			}
+		},
+	}
+
+	sodaBottlingPlantEffect = effect{
+		Priority: 1,
+
+		Description: func() string {
+			return "Get 1 coin from the bank for every [Cup] owned by all players, on your turn only"
+		},
+
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
+			if p != rlr {
+				return
+			}
+
+			iconCardCount := 0
+			iconCards := market.FindByIcon("Cup")
+
+			for _, plr := range plrs {
+				for _, iconCard := range iconCards {
+					iconCardCount += plr.SupplyCards[iconCard.Name].Total
+				}
+			}
+
+			totalPayout := 1 * iconCardCount
 
 			fmt.Printf("Player %d gets %d coins from the bank [%s].\n", p.ID, totalPayout, card.Name)
 			remainder := bank.TransferTo(totalPayout, &p.Coins)
@@ -35,15 +115,229 @@ var (
 		},
 	}
 
+	// NOTE: While money is put on each card, the money is actually pooled, since Major cards cannot be closed for renovation or traded.
+	techStartupEffect = effect{
+		Priority: 2,
+
+		Description: func() string {
+			return "At the end of your turn you can put 1 coin on this card. If this card is activated, you get that many coins from each player, on your turn only"
+		},
+
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
+			if p != rlr {
+				return
+			}
+
+			totalPayout := p.Investment.Total()
+
+			for _, plr := range plrs {
+				if plr == rlr {
+					continue
+				}
+
+				fmt.Printf("Player %d gets %d coins from player %d [%s]\n", rlr.ID, totalPayout, plr.ID, card.Name)
+				remainder := plr.Coins.TransferTo(totalPayout, &rlr.Coins)
+
+				if remainder > 0 {
+					fmt.Printf("Player %d did not have enough money. Missing: %d\n", plr.ID, remainder)
+				}
+			}
+		},
+	}
+
+	wineryPayout = newCardPayout(6, "Vineyard")
+	wineryEffect = effect{
+		Priority: 1,
+
+		Description: func() string {
+			return "Get 6 coins for each vineyard you have, then close this building for renovation, on your turn only"
+		},
+
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
+			if p != rlr {
+				return
+			}
+
+			wineryPayout.Call(card, rlr, p, c, pc, specialRoll)
+
+			fmt.Printf("%d of Player %d's %s cards are closed for renovation.\n", c, p.ID, card.Name)
+
+			pc.Renovation = pc.Total
+		},
+	}
+
+	movingCompanyEffect = effect{
+		Priority: 1,
+
+		Description: func() string {
+			return "You must give a non-[Major] building you own to another player. When you do, get 4 coins from the bank, on your turn only"
+		},
+
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
+			if p != rlr {
+				return
+			}
+
+			for i := 0; i < c; i++ {
+				plrChoices := []int{}
+				cardChoices := make(map[int][]int)
+				cardChoiceNames := make(map[int][]string)
+
+				for _, plr := range plrs {
+					if plr == rlr {
+						fmt.Printf("Roller has cards:\n")
+					} else {
+						plrChoices = append(plrChoices, plr.ID)
+						fmt.Printf("Player (%d) has cards:\n", plr.ID)
+					}
+
+					j := 1
+					for cardName, playerCard := range plr.SupplyCards {
+						currentCard := market.FindByName(cardName)
+
+						if currentCard.Icon == "Major" || playerCard.Total == 0 {
+							continue
+						}
+						cardChoices[plr.ID] = append(cardChoices[plr.ID], j)
+						cardChoiceNames[plr.ID] = append(cardChoiceNames[plr.ID], cardName)
+						fmt.Printf("  (%d) %s [%d]\n", j, cardName, playerCard.Total)
+						j++
+					}
+				}
+
+				var plrID int
+				var giveCardIdx int
+				var err error
+
+				for {
+					fmt.Println("Pick a player to trade cards with: ")
+					plrID, err = scanInt(plrChoices)
+					if err != nil {
+						fmt.Println(err)
+						continue
+					}
+					break
+				}
+
+				for {
+					fmt.Println("Pick a card to give: ")
+					giveCardIdx, err = scanInt(cardChoices[rlr.ID])
+					if err != nil {
+						fmt.Println(err)
+						continue
+					}
+					break
+				}
+				giveCardName := cardChoiceNames[rlr.ID][giveCardIdx-1]
+
+				fmt.Printf("Player %d gives %s to player %d [%s]\n", rlr.ID, giveCardName, plrID, card.Name)
+				rlr.SupplyCards[giveCardName].Total--
+
+				for _, plr := range plrs {
+					if plr.ID != plrID {
+						continue
+					}
+
+					p.SupplyCards[giveCardName].Total++
+				}
+
+				fmt.Printf("Player %d gets 4 coins from the bank [%s]\n", rlr.ID, card.Name)
+				remainder := bank.TransferTo(4, &rlr.Coins)
+
+				if remainder > 0 {
+					fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
+				}
+			}
+		},
+	}
+
+	renovationCompanyEffect = effect{
+		Priority: 2,
+
+		Description: func() string {
+			return "Choose a non-[Major] building. All buildings owned by any player of that type are closed for renovations. Get 1 coin from the bank for each building closed for renovation, on your turn only"
+		},
+
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
+			if p != rlr {
+				return
+			}
+
+			for i := 0; i < c; i++ {
+				plrChoices := []int{}
+				cardChoicesCount := make(map[string]int)
+
+				for _, plr := range plrs {
+					if plr == rlr {
+						fmt.Printf("Roller has cards:\n")
+					} else {
+						plrChoices = append(plrChoices, plr.ID)
+						fmt.Printf("Player (%d) has cards:\n", plr.ID)
+					}
+
+					j := 1
+					for cardName, playerCard := range plr.SupplyCards {
+						currentCard := market.FindByName(cardName)
+
+						if currentCard.Icon == "Major" || playerCard.Total == 0 {
+							continue
+						}
+						cardChoicesCount[cardName]++
+						j++
+					}
+				}
+
+				var cardIdx int
+				var cardChoices []int
+				var cardChoiceNames []string
+				var err error
+				var i int
+
+				for cardName, count := range cardChoicesCount {
+					cardChoices = append(cardChoices, i)
+					cardChoiceNames = append(cardChoiceNames, cardName)
+					fmt.Printf("  (%d) %s [%d]\n", i, cardName, count)
+					i++
+				}
+				fmt.Println("Pick a card to close for renovation: ")
+				cardIdx, err = scanInt(cardChoices)
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+				cardName := cardChoiceNames[cardIdx-1]
+
+				fmt.Printf("Player %d closes %s for renovations [%s]\n", rlr.ID, cardName, card.Name)
+
+				for _, plr := range plrs {
+					plr.SupplyCards[cardName].Renovation = plr.SupplyCards[cardName].Total
+				}
+
+				totalPayment := cardChoicesCount[cardName]
+
+				fmt.Printf("Player %d gets %d coins from the bank [%s]\n", rlr.ID, totalPayment, card.Name)
+				remainder := bank.TransferTo(totalPayment, &rlr.Coins)
+
+				if remainder > 0 {
+					fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
+				}
+			}
+		},
+	}
+
 	demolitionCompanyEffect = effect{
 		Priority: 1,
 
 		Description: func() string {
-			return "For each Demolition Company you own, you must demolish a constructed landmark and take 8 coins from the bank"
+			return "For each Demolition Company you own, you must demolish a constructed landmark and take 8 coins from the bank, on your turn only"
 		},
 
-		// TODO
-		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
+			if p != rlr {
+				return
+			}
+
+			// TODO
 			totalPayout := specialRoll * c
 
 			fmt.Printf("Player %d gets %d coins from the bank [%s].\n", p.ID, totalPayout, card.Name)
@@ -62,7 +356,7 @@ var (
 			return "If you have the [Harbor] landmark. Roller rolls 2 dice and you receive that many coins from the bank on anyone's turn"
 		},
 
-		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
 			if !p.LandmarkCards["Harbor"] {
 				return
 			}
@@ -85,7 +379,11 @@ var (
 			return "For each players with 10 or more coins, you get half of their coins on your turn only"
 		},
 
-		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
+			if p != rlr {
+				return
+			}
+
 			for _, plr := range plrs {
 				if plr == rlr || plr.Coins.Total() < 10 {
 					continue
@@ -109,7 +407,11 @@ var (
 			return "Get 1 coin from each player for each [Cup] and [Bread] they have on your turn only"
 		},
 
-		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
+			if p != rlr {
+				return
+			}
+
 			for _, plr := range plrs {
 				if plr == rlr {
 					continue
@@ -118,7 +420,7 @@ var (
 				iconCards := append(market.FindByIcon("Cup"), market.FindByIcon("Bread")...)
 				iconCardCount := 0
 				for _, iconCard := range iconCards {
-					iconCardCount += plr.SupplyCards[iconCard.Name]
+					iconCardCount += plr.SupplyCards[iconCard.Name].Total
 				}
 				totalPayout := 1 * iconCardCount * c
 
@@ -139,7 +441,11 @@ var (
 			return "Get 2 coins from each player on your turn only"
 		},
 
-		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
+			if p != rlr {
+				return
+			}
+
 			totalPayout := 2 * c
 
 			fmt.Print(card.Effect.Description())
@@ -167,7 +473,11 @@ var (
 			return "Take 5 coins from any one player on your turn only"
 		},
 
-		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
+			if p != rlr {
+				return
+			}
+
 			var choices []int
 			var choice int
 			var err error
@@ -215,10 +525,14 @@ var (
 		Priority: 2,
 
 		Description: func() string {
-			return "Trade one non major establishment with any one player on your turn only"
+			return "Trade one non major establishment with any one player on your turn only."
 		},
 
-		Call: func(card supplyCard, rlr *player, p *player, c int, specialRoll int) {
+		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) {
+			if p != rlr {
+				return
+			}
+
 			for i := 0; i < c; i++ {
 				plrChoices := []int{}
 				cardChoices := make(map[int][]int)
@@ -233,15 +547,15 @@ var (
 					}
 
 					j := 1
-					for cardName, cardCount := range plr.SupplyCards {
+					for cardName, playerCard := range plr.SupplyCards {
 						currentCard := market.FindByName(cardName)
 
-						if currentCard.Icon == "Major" || cardCount == 0 {
+						if currentCard.Icon == "Major" || playerCard.Total == 0 {
 							continue
 						}
 						cardChoices[plr.ID] = append(cardChoices[plr.ID], j)
 						cardChoiceNames[plr.ID] = append(cardChoiceNames[plr.ID], cardName)
-						fmt.Printf("  (%d) %s [%d]\n", j, cardName, cardCount)
+						fmt.Printf("  (%d) %s [%d]\n", j, cardName, playerCard.Total)
 						j++
 					}
 				}
@@ -270,16 +584,16 @@ var (
 				giveCardName := cardChoiceNames[rlr.ID][giveCardIdx-1]
 
 				fmt.Printf("Player %d trades %s for %s with player %d [%s]\n", rlr.ID, giveCardName, takeCardName, plrID, card.Name)
-				rlr.SupplyCards[giveCardName]--
-				rlr.SupplyCards[takeCardName]++
+				rlr.SupplyCards[giveCardName].Total--
+				rlr.SupplyCards[takeCardName].Total++
 
 				for _, plr := range plrs {
 					if plr.ID != plrID {
 						continue
 					}
 
-					p.SupplyCards[takeCardName]--
-					p.SupplyCards[giveCardName]++
+					p.SupplyCards[takeCardName].Total--
+					p.SupplyCards[giveCardName].Total++
 				}
 			}
 		},
@@ -593,6 +907,54 @@ var (
 			Effect:        renovationCompanyEffect,
 			Icon:          "Major",
 			Supply:        4,
+		},
+		&supplyCard{
+			Name:          "Moving Company",
+			Cost:          2,
+			ActiveNumbers: []int{9, 10},
+			Effect:        movingCompanyEffect,
+			Icon:          "Suitcase",
+			Supply:        6,
+		},
+		&supplyCard{
+			Name:          "Winery",
+			Cost:          3,
+			ActiveNumbers: []int{9},
+			Effect:        wineryEffect,
+			Icon:          "Factory",
+			Supply:        6,
+		},
+		&supplyCard{
+			Name:          "Tech Startup",
+			Cost:          1,
+			ActiveNumbers: []int{10},
+			Effect:        techStartupEffect,
+			Icon:          "Major",
+			Supply:        4,
+		},
+		&supplyCard{
+			Name:          "Soda Bottling Plant",
+			Cost:          5,
+			ActiveNumbers: []int{11},
+			Effect:        sodaBottlingPlantEffect,
+			Icon:          "Factory",
+			Supply:        6,
+		},
+		&supplyCard{
+			Name:          "Park",
+			Cost:          3,
+			ActiveNumbers: []int{11, 12, 13},
+			Effect:        parkEffect,
+			Icon:          "Major",
+			Supply:        4,
+		},
+		&supplyCard{
+			Name:          "Member's Only Club",
+			Cost:          4,
+			ActiveNumbers: []int{12, 13, 14},
+			Effect:        membersOnlyClubEffect,
+			Icon:          "Cup",
+			Supply:        6,
 		},
 	}
 )

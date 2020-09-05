@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"math/rand"
 )
 
@@ -91,10 +90,6 @@ func newExpansionMarketManager(cards []*supplyCard) expansionMarket {
 	}
 
 	manager.resupplyMarket()
-
-	fmt.Printf("%v", manager.LOnMarket)
-	fmt.Println(manager.HOnMarket)
-	fmt.Println(manager)
 
 	return manager
 }
