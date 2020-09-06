@@ -238,7 +238,12 @@ var (
 						continue
 					}
 
-					p.SupplyCards[giveCardName].Total++
+					givepc, ok := p.SupplyCards[giveCardName]
+					if !ok {
+						givepc = &playerCard{}
+						p.SupplyCards[giveCardName] = givepc
+					}
+					givepc.Total++
 				}
 
 				fmt.Printf("Player %d gets 4 coins from the bank [%s]\n", rlr.ID, card.Name)
@@ -618,7 +623,12 @@ var (
 
 				fmt.Printf("Player %d trades %s for %s with player %d [%s]\n", rlr.ID, giveCardName, takeCardName, plrID, card.Name)
 				rlr.SupplyCards[giveCardName].Total--
-				rlr.SupplyCards[takeCardName].Total++
+				takepc, ok := p.SupplyCards[takeCardName]
+				if !ok {
+					takepc = &playerCard{}
+					rlr.SupplyCards[takeCardName] = takepc
+				}
+				takepc.Total++
 
 				for _, plr := range plrs {
 					if plr.ID != plrID {
@@ -626,7 +636,12 @@ var (
 					}
 
 					p.SupplyCards[takeCardName].Total--
-					p.SupplyCards[giveCardName].Total++
+					givepc, ok := p.SupplyCards[giveCardName]
+					if !ok {
+						givepc = &playerCard{}
+						p.SupplyCards[giveCardName] = givepc
+					}
+					givepc.Total++
 				}
 			}
 		},

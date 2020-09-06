@@ -224,7 +224,6 @@ func promptSupplyCardPurchase(rlr *player) bool {
 		card := cardCount.Card
 		count := cardCount.Count
 		if count == 0 {
-			fmt.Printf("Count is 0!!! %v", card)
 			continue
 		}
 		// Some cards have negative cost (i.e. get money from the bank)
@@ -257,7 +256,12 @@ func promptSupplyCardPurchase(rlr *player) bool {
 		} else if card.Cost < 0 {
 			bank.TransferTo(card.Cost, &rlr.Coins)
 		}
-		rlr.SupplyCards[supplyCardName].Total++
+		pc, ok := rlr.SupplyCards[supplyCardName]
+		if !ok {
+			pc = &playerCard{}
+			rlr.SupplyCards[supplyCardName] = pc
+		}
+		pc.Total++
 		market.Purchase(card.Name)
 	}
 	return true
