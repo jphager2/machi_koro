@@ -152,9 +152,11 @@ func main() {
 			os.Exit(0)
 		}
 
-		turnInvestmentMax := rlr.SupplyCards["Tech Startup"].Total
-		if turnInvestmentMax > 0 {
-			promptInvestment(rlr, turnInvestmentMax)
+		pc, ok := rlr.SupplyCards["Tech Startup"]
+		if ok {
+			if pc.Total > 0 {
+				promptInvestment(rlr, pc.Total)
+			}
 		}
 
 		turn = (turn + 1) % len(plrs)
@@ -162,7 +164,7 @@ func main() {
 }
 
 func promptInvestment(rlr *player, max int) {
-	fmt.Printf("How much do you want to invest into your Tech Startups (max %d)\n", max)
+	fmt.Printf("How much do you want to invest into your Tech Startups (max %d) [current %d]\n", max, rlr.Investment)
 	var choices []int
 	for i := 0; i < max; i++ {
 		choices = append(choices, i+1)

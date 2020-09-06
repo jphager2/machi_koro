@@ -325,7 +325,8 @@ var (
 		},
 	}
 
-	demolitionCompanyEffect = effect{
+	atLeastOneLandmarkPrereq = newLandmarkMinPrereq(0)
+	demolitionCompanyEffect  = effect{
 		Priority: 1,
 
 		Description: func() string {
@@ -336,15 +337,47 @@ var (
 			if p != rlr {
 				return
 			}
+			for i := 0; i < c; i++ {
+				if !atLeastOneLandmarkPrereq.Call(card, rlr, p, c, pc, specialRoll) {
+					return
+				}
 
-			// TODO
-			totalPayout := specialRoll * c
+				j := 0
+				choices := []int{}
+				choiceNames := []string{}
+				fmt.Printf("Player %d Landmarks: \n", rlr.ID)
+				for _, landmark := range landmarkCardsSorted {
+					if !rlr.LandmarkCards[landmark.Name] || landmark.Name == "City Hall" {
+						continue
+					}
 
-			fmt.Printf("Player %d gets %d coins from the bank [%s].\n", p.ID, totalPayout, card.Name)
-			remainder := bank.TransferTo(totalPayout, &p.Coins)
+					j++
+					choices = append(choices, j)
+					choiceNames = append(choiceNames, landmark.Name)
+					fmt.Printf("  (%d) %s [%d coins]: %s\n", j, landmark.Name, landmark.Cost, landmark.Description)
+				}
 
-			if remainder > 0 {
-				fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
+				var landmarkIdx int
+				var err error
+
+				for {
+					fmt.Print("Which landmark do you want to demolish? ")
+					landmarkIdx, err = scanInt(choices)
+					if err != nil {
+						fmt.Println("No landmark selected.")
+						continue
+					}
+					break
+				}
+				landmarkName := choiceNames[landmarkIdx-1]
+				rlr.LandmarkCards[landmarkName] = false
+
+				fmt.Printf("Player %d gets 8 coins from the bank [%s].\n", rlr.ID, card.Name)
+				remainder := bank.TransferTo(8, &rlr.Coins)
+
+				if remainder > 0 {
+					fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
+				}
 			}
 		},
 	}

@@ -5,12 +5,12 @@ import (
 	"math/rand"
 )
 
-// TODO: Marketplace should manage the available and supply of cards
-//       For example in harbor and millionaire's row not all cards are on the table at all times
-//       In the english version it simply picks 10 cards at time. In the Czech version there are
-//         * 5 cards 1-6
-//         * 5 cards 7+
-//         * 2 cards Major establishments
+// Marketplace should manage the available and supply of cards
+// For example in harbor and millionaire's row not all cards are on the table at all times
+// In the english version it simply picks 10 cards at time. In the Czech version there are
+//   * 5 cards 1-6
+//   * 5 cards 7+
+//   * 2 cards Major establishments
 //
 type marketplace struct {
 	Market           marketManager

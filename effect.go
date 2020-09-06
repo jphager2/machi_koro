@@ -150,24 +150,32 @@ func newLandmarkMaxPrereq(max int) prereq {
 	return prereq{
 		Desc: fmt.Sprintf("If player has the less than %d constructed landmarks (excluding City Hall). ", max+1),
 		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) bool {
-			if rlr.LandmarkCards["City Hall"] {
-				return len(rlr.LandmarkCards)-1 < max
-			}
-
-			return len(rlr.LandmarkCards) < max
+			return landmarkCount(rlr) < max
 		},
 	}
+}
+
+func landmarkCount(p *player) int {
+	var count int
+
+	for name, active := range p.LandmarkCards {
+		if name == "City Hall" {
+			continue
+		}
+
+		if active {
+			count++
+		}
+	}
+
+	return count
 }
 
 func newLandmarkMinPrereq(min int) prereq {
 	return prereq{
 		Desc: fmt.Sprintf("If player has the more than %d constructed landmarks (excluding City Hall). ", min+1),
 		Call: func(card supplyCard, rlr *player, p *player, c int, pc *playerCard, specialRoll int) bool {
-			if rlr.LandmarkCards["City Hall"] {
-				return len(rlr.LandmarkCards)-1 > min
-			}
-
-			return len(rlr.LandmarkCards) > min
+			return landmarkCount(rlr) > min
 		},
 	}
 }
