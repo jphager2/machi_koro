@@ -1,19 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
 	"strconv"
 	"strings"
 )
-
-type player struct {
-	ID            int
-	SupplyCards   map[string]int
-	LandmarkCards map[string]bool
-	Coins         coinSet
-}
 
 func main() {
 	fmt.Println("machi koro!")
@@ -26,6 +20,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	version, err := promptVersionChoice()
+
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	version.Init()
+
 	for i := 0; i < plrCount; i++ {
 		p := player{ID: i}
 		plrs = append(plrs, &p)
@@ -34,13 +36,13 @@ func main() {
 		if remainder > 0 {
 			fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
 		}
-		p.SupplyCards = make(map[string]int)
-		p.SupplyCards["Wheat Field"]++
-		p.SupplyCards["Bakery"]++
+		p.SupplyCards = make(map[string]*playerCard)
+		p.SupplyCards["Wheat Field"] = &playerCard{Total: 1, Renovation: 0}
+		p.SupplyCards["Bakery"] = &playerCard{Total: 1, Renovation: 0}
 
 		p.LandmarkCards = make(map[string]bool)
-		for landmarkName := range landmarkCards {
-			p.LandmarkCards[landmarkName] = false
+		for _, landmark := range landmarkCardsSorted {
+			p.LandmarkCards[landmark.Name] = landmark.Cost == 0
 		}
 	}
 
@@ -73,19 +75,51 @@ func main() {
 			}
 		}
 
-		// For each active card apply effects in reverse order of players.
-		// Roller should get money from bank, then money from players before
-		// other players receive payouts.
-		cards := supplyCards.FindByRoll(r)
+		if r >= 10 && rlr.LandmarkCards["Harbor"] {
+			fmt.Print("Do you want to add 2 to your roll? ")
 
+			if res := promptBool(); res {
+				r += 2
+			}
+		}
+
+		// Card effects should be applied in priority order, first red cards, then
+		// green/blue cards, then purple cards.
+		cards := market.FindByRoll(r)
+		// This two dice roll is used for some card effects to determine payouts.  It
+		// should only be rolled once per roll.
+		specialRoll := (rand.Intn(11) + 1)
 		for i := 0; i < len(plrs); i++ {
 			p := plrs[(len(plrs)+rlr.ID-i)%len(plrs)]
 
 			for _, card := range cards {
-				c := p.SupplyCards[card.Name]
-				if c > 0 {
-					card.Effect.Call(*card, rlr, p, c)
+				pc, ok := p.SupplyCards[card.Name]
+				if !ok {
+					continue
 				}
+				c := pc.Active()
+				pc.Renovation = 0
+				if c > 0 {
+					card.Effect.Call(*card, rlr, p, c, pc, specialRoll)
+				}
+			}
+		}
+
+		if doubles && rlr.LandmarkCards["Amusement Park"] {
+			fmt.Print("You got doubles, do you want to roll again? ")
+
+			if res := promptBool(); res {
+				continue
+			}
+		}
+
+		if rlr.Coins.Total() == 0 && rlr.LandmarkCards["City Hall"] {
+			fmt.Println("Getting 1 coin from the bank, since you didn't have any")
+
+			remainder := bank.TransferTo(1, &rlr.Coins)
+
+			if remainder > 0 {
+				fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
 			}
 		}
 
@@ -94,6 +128,16 @@ func main() {
 			didAction = false
 		} else {
 			didAction = promptLandmarkCardPurchase(rlr)
+		}
+
+		if !didAction && rlr.LandmarkCards["Airport"] {
+			fmt.Println("Getting 10 coins from the bank, since you didn't buy anything")
+
+			remainder := bank.TransferTo(10, &rlr.Coins)
+
+			if remainder > 0 {
+				fmt.Printf("Bank did not have enough money. Missing: %d\n", remainder)
+			}
 		}
 
 		winner := true
@@ -108,12 +152,29 @@ func main() {
 			os.Exit(0)
 		}
 
-		if doubles && rlr.LandmarkCards["Amusement Park"] {
-			continue
+		pc, ok := rlr.SupplyCards["Tech Startup"]
+		if ok {
+			if pc.Total > 0 {
+				promptInvestment(rlr, pc.Total)
+			}
 		}
 
 		turn = (turn + 1) % len(plrs)
 	}
+}
+
+func promptInvestment(rlr *player, max int) {
+	fmt.Printf("How much do you want to invest into your Tech Startups (max %d) [current %d]\n", max, rlr.Investment)
+	var choices []int
+	for i := 0; i < max; i++ {
+		choices = append(choices, i+1)
+	}
+	investment, err := scanInt(choices)
+	if err != nil {
+		fmt.Println("No investment made.")
+		return
+	}
+	rlr.Coins.TransferTo(investment, &rlr.Investment)
 }
 
 func promptBool() bool {
@@ -159,15 +220,22 @@ func promptSupplyCardPurchase(rlr *player) bool {
 	choices := []int{}
 	choiceNames := []string{}
 	fmt.Println("Establishments: ")
-	for _, card := range supplyCards.Cards {
-		if card.Supply == 0 {
+	for _, cardCount := range market.EachCard() {
+		card := cardCount.Card
+		count := cardCount.Count
+		if count == 0 {
 			continue
+		}
+		// Some cards have negative cost (i.e. get money from the bank)
+		displayCost := card.Cost
+		if displayCost < 0 {
+			displayCost = 0
 		}
 
 		i++
 		choices = append(choices, i)
 		choiceNames = append(choiceNames, card.Name)
-		fmt.Printf("  (%d) %s [%d coins] (%d left): %s\n", i, card.Name, card.Cost, card.Supply, card.Effect.Description())
+		fmt.Printf("  (%d) %s [%d coins] (%d left): %s\n", i, card.Name, displayCost, count, card.Effect.Description())
 	}
 
 	fmt.Print("Which establishment do you want to buy? ")
@@ -177,15 +245,24 @@ func promptSupplyCardPurchase(rlr *player) bool {
 		return false
 	}
 	supplyCardName := choiceNames[supplyCardIdx-1]
-	card := supplyCards.FindByName(supplyCardName)
+	card := market.FindByName(supplyCardName)
 
 	if rlr.Coins.Total() < card.Cost {
 		fmt.Printf("Player %d does not have enough coins to buy %s\n", rlr.ID, supplyCardName)
 	} else {
 		fmt.Printf("Player %d buys %s\n", rlr.ID, supplyCardName)
-		rlr.Coins.TransferTo(card.Cost, &bank)
-		rlr.SupplyCards[supplyCardName]++
-		card.Supply--
+		if card.Cost > 0 {
+			rlr.Coins.TransferTo(card.Cost, &bank)
+		} else if card.Cost < 0 {
+			bank.TransferTo(card.Cost, &rlr.Coins)
+		}
+		pc, ok := rlr.SupplyCards[supplyCardName]
+		if !ok {
+			pc = &playerCard{}
+			rlr.SupplyCards[supplyCardName] = pc
+		}
+		pc.Total++
+		market.Purchase(card.Name)
 	}
 	return true
 }
@@ -232,6 +309,26 @@ func promptLandmarkCardPurchase(rlr *player) bool {
 	return true
 }
 
+func promptVersionChoice() (gameVersion, error) {
+	var choice gameVersion
+	choices := []int{}
+	choiceNames := []string{}
+	fmt.Println("Versions: ")
+	for i, version := range gameVersionsSorted {
+		choices = append(choices, i+1)
+		choiceNames = append(choiceNames, version.Name)
+		fmt.Printf("  (%d) %s \n", i+1, version.Name)
+	}
+
+	fmt.Print("Which version do you want to play? ")
+	versionIdx, err := scanInt(choices)
+	if err != nil {
+		return choice, errors.New("No version selected.")
+	}
+
+	return gameVersionsSorted[versionIdx-1], nil
+}
+
 func promptDieCount(choice bool) (int, error) {
 	var dieCount int
 	var err error
@@ -263,11 +360,4 @@ func roll(dieCount int) (int, bool) {
 	}
 
 	return r, doubles
-}
-
-func printPlayerStatus() {
-	for _, p := range plrs {
-		fmt.Printf("%d: %d Coins\n", p.ID, p.Coins.Total())
-		fmt.Println(p.SupplyCards)
-	}
 }
