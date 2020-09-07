@@ -361,10 +361,3 @@ func roll(dieCount int) (int, bool) {
 
 	return r, doubles
 }
-
-func printPlayerStatus() {
-	for _, p := range plrs {
-		fmt.Printf("%d: %d Coins\n", p.ID, p.Coins.Total())
-		fmt.Println(p.SupplyCards)
-	}
-}

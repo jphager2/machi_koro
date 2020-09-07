@@ -650,7 +650,20 @@ var (
 	landmarkCardsSorted []landmarkCard
 	landmarkCards       map[string]landmarkCard
 
-	gameVersionsSorted []gameVersion
+	gameVersionsSorted = []gameVersion{
+		gameVersion{
+			Name: "Basic",
+			Init: initBasic,
+		},
+		gameVersion{
+			Name: "The Harbor",
+			Init: initHarbor,
+		},
+		gameVersion{
+			Name: "Millionaire's row",
+			Init: initMillionaire,
+		},
+	}
 
 	plrs []*player
 
@@ -1053,19 +1066,4 @@ func initMillionaire() {
 
 func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
-
-	gameVersionsSorted = []gameVersion{
-		gameVersion{
-			Name: "Basic",
-			Init: initBasic,
-		},
-		gameVersion{
-			Name: "The Harbor",
-			Init: initHarbor,
-		},
-		gameVersion{
-			Name: "Millionaire's row",
-			Init: initMillionaire,
-		},
-	}
 }
